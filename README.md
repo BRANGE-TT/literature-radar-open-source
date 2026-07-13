@@ -188,7 +188,7 @@ deleteDailyScholarTrigger()
 旧补充流程默认 Gmail 查询为：
 
 ```text
-from:sender@example.com newer_than:7d
+from:scholaralerts-noreply@google.com newer_than:7d
 ```
 
 可以在 Gmail 中先手动搜索确认。如果邮件主题更稳定，也可以把 `CONFIG.GMAIL.SEARCH_QUERY` 改为 `subject:"Google Scholar Alert" newer_than:14d`。

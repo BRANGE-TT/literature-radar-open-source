@@ -16,7 +16,7 @@
 | 飞书 Webhook | PASSED | 未发现真实 Webhook；仅存在属性名与文档说明。 |
 | OpenAlex API Key | PASSED | 未发现真实 API Key；仅存在属性名与动态请求参数构造。 |
 | GitHub Token / Bearer 凭证 | PASSED | 当前文件与可达 Git 历史均未发现。 |
-| 邮箱地址 | PASSED | 个性化检索邮箱已替换为保留域名占位符，可达历史中不再包含实际地址。 |
+| 邮箱地址 | PASSED | 仅发现 Google Scholar Alert 公共服务发件地址；不是个人邮箱或凭证，无需处理。 |
 | Apps Script ID | PASSED | 新 Script ID 仅存在于本地 `.clasp.json`，该文件已忽略且未被跟踪。 |
 | 敏感文件与日志 | PASSED | 未发现 `.env`、凭证文件、Token 文件、日志或个人缓存记录。 |
 | Git 提交元数据 | PASSED | 提交身份使用 GitHub noreply 地址。 |
@@ -24,8 +24,8 @@
 
 ## 处置记录
 
-- 将开源项目中的个性化 Gmail 检索地址替换为 `sender@example.com` 占位符；
-- 重写尚未发布的独立 Git 历史，使全部可达提交只包含占位符；
+- 复核 Gmail 检索地址为 Google Scholar Alert 公共服务发件地址，保留该可选业务流程；
+- 扫描全部可达 Git 历史，未发现个人邮箱或认证凭证；
 - 未修改检索算法、评分权重、OA-Q1 proxy 或个人稳定版项目。
 
 ## 推送判定

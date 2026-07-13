@@ -20,7 +20,7 @@ const CONFIG = {
 
   GMAIL: {
     // Gmail 搜索关键词。默认只读取最近 7 天的 Google Scholar Alert。
-    SEARCH_QUERY: 'from:sender@example.com newer_than:7d',
+    SEARCH_QUERY: 'from:scholaralerts-noreply@google.com newer_than:7d',
 
     // Gmail 搜索返回的最大会话数。Google Scholar Alert 通常一个会话里有多封邮件。
     MAX_THREADS: 20,
