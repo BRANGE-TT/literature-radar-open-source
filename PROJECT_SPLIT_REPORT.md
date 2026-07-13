@@ -15,7 +15,7 @@
 | Git 分支 | `feature/openalex-oa-q1-proxy` | `main` |
 | Git remote | 原 `origin`，未变更 | 未配置 |
 | GitHub 可见性 | `PRIVATE`，未变更 | 尚未创建 GitHub 仓库 |
-| 稳定快照 | 提交 `fb88e88ede1cb767ca1e6bbe8afd750166d8b556`；Tag `personal-stable-v1` 已推送 | 首次提交 `3f3fbfe2fd637ef7abbd97da8c6b12911b7ea113` |
+| 稳定快照 | 提交 `fb88e88ede1cb767ca1e6bbe8afd750166d8b556`；Tag `personal-stable-v1` 已推送 | 首次提交 `b6fc42ba98b83980ffb25f939cadc82cb58962b0` |
 | Apps Script | 原 Script ID `1ejU****1gzX` | 新 standalone Script ID `1x0a****dDi-` |
 | Script Properties | 原正式配置未修改 | 未复制、未配置 |
 | 触发器 | 未执行删除或修改操作 | 未创建 |
