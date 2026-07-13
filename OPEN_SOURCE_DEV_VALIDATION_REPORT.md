@@ -47,7 +47,8 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | 上传文件 | PASSED | 远端仅包含 `appsscript` 与 `Code`，内容与本地完全一致。 |
 | 触发器 | PASSED | 本次未调用任何创建、删除或修改触发器的函数。 |
 | Script Properties 复制 | PASSED | 未读取或复制个人项目的任何 Script Properties。 |
-| 新项目属性配置 | BLOCKED | 分离报告记录为未配置；本次未写入。Playwright 独立会话未登录 Google，未读取属性值或做 UI 变更。 |
+| 首次 Google 授权 | PASSED | 已在新项目中完成首次运行授权；未请求或使用 Gmail 权限。 |
+| 新项目属性配置 | BLOCKED | 已在项目设置中核对为未配置；未写入、未从个人项目复制，也未显示属性值。 |
 
 首次同步前，远端只有默认 manifest。本地 manifest 与远端仅在 `executionApi`、`oauthScopes`、`timeZone` 三项存在预期差异；同步会新增 `Code`，不会删除远端脚本文件。
 
@@ -100,6 +101,7 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | OpenAlex 主流程 | PASSED | 主流程与两方向检索入口存在。 |
 | 本地 Node 单元测试 | PASSED | 24 项全部通过。 |
 | 评分机制 | PASSED | 本地测试覆盖 relatedness、venue quality、citation、freshness、final score 与 OA-Q1 proxy。 |
+| Apps Script 在线 mock 评分 | PASSED | 在新项目中执行 `testVenueQualityScoring()`，日志显示执行完毕；不依赖外部凭据，不发送消息、不写去重记录、不创建触发器。 |
 | OpenAlex API 连通性 | BLOCKED | 新项目未配置 `OPENALEX_API_KEY`。 |
 | 统计学方向主动检索 | BLOCKED | 新项目未配置 `OPENALEX_API_KEY`。 |
 | 医学机器学习方向主动检索 | BLOCKED | 新项目未配置 `OPENALEX_API_KEY`。 |
@@ -124,11 +126,11 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 
 ## 8. 尚需用户手动完成的事项
 
-1. 在浏览器登录 Google Apps Script，打开 `Literature Radar Open Source Dev`，进入“项目设置”→“脚本属性”。
-2. 添加开发者自己的 `OPENALEX_API_KEY`；不要从个人稳定版复制，也不要把值发到聊天或提交到 Git。
-3. 在飞书创建专用开发测试群和自定义机器人，把该测试机器人的 Webhook 配置为新项目的 `FEISHU_WEBHOOK`。如果启用签名校验，再配置 `FEISHU_SIGN_SECRET`。
-4. 完成后只需告知：`OPENALEX_API_KEY 已配置`、`FEISHU_WEBHOOK 已配置且确认属于开发测试群`、是否启用签名；不要提供完整值。
-5. Google 首次执行时，按界面提示授权新 Apps Script 项目的外部请求和脚本存储权限。
+Google 登录与新项目首次 Apps Script 授权已在本次验证中完成。尚需：
+
+1. 打开 `Literature Radar Open Source Dev` 的“项目设置”→“脚本属性”，添加开发者自己的 `OPENALEX_API_KEY`；不要从个人稳定版复制，也不要把值发到聊天或提交到 Git。
+2. 在飞书创建专用开发测试群和自定义机器人，把该测试机器人的 Webhook 配置为新项目的 `FEISHU_WEBHOOK`。如果启用签名校验，再配置 `FEISHU_SIGN_SECRET`。
+3. 完成后只需告知：`OPENALEX_API_KEY 已配置`、`FEISHU_WEBHOOK 已配置且确认属于开发测试群`、是否启用签名；不要提供完整值。
 
 后续验证顺序应为：OpenAlex 连通性 → 两方向主动检索 → 评分输出 → 安全 dry run → 符合指定文案的单条飞书测试 → 一次受限完整流程测试。任何阶段都不得创建正式触发器。
 
