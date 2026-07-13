@@ -1,0 +1,21 @@
+# Local Apps Script binding and credentials
+.clasp.json
+.env
+.env.*
+credentials.json
+token.json
+
+# Runtime output and dependencies
+*.log
+@AutomationLog.txt
+node_modules/
+dist/
+build/
+tmp/
+temp/
+.playwright-mcp/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/settings.json
