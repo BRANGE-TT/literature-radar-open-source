@@ -378,6 +378,19 @@ function testFeishuPush() {
 }
 
 /**
+ * 发送一条开源开发环境专用飞书测试消息。
+ * 不查询文献，也不写入正式去重记录。
+ */
+function testOpenSourceDevFeishuPush() {
+  postFeishuText_([
+    'Literature Radar Open Source Dev Test',
+    '这是开源开发环境测试消息。',
+    '不代表正式文献推荐。',
+    '本测试不会写入正式去重记录。'
+  ].join('\n'));
+}
+
+/**
  * 预览 Gmail 解析结果，不会推送飞书，也不会写入去重记录。
  */
 function previewScholarPapers() {

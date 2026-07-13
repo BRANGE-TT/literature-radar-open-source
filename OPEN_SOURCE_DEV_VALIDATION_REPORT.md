@@ -44,26 +44,29 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 |---|---|---|
 | 目标项目识别 | PASSED | Apps Script API 返回的项目名称与本地 Script ID 均匹配新项目。 |
 | 首次 `clasp push` | PASSED | 使用标准交互式 `clasp push`，审查 manifest 差异后确认；未使用 `--force`。 |
+| 本次增量同步 | PASSED | 标准 `clasp push` 因 Google OAuth 连接超时而未写入远端；随后通过 Apps Script 官方 `projects.updateContent` 接口仅同步 `Code` 与 `appsscript`，回读哈希与本地完全一致。 |
 | 上传文件 | PASSED | 远端仅包含 `appsscript` 与 `Code`，内容与本地完全一致。 |
-| 触发器 | PASSED | 本次未调用任何创建、删除或修改触发器的函数。 |
+| 触发器 | PASSED | 本次未调用任何创建、删除或修改触发器的函数；新项目触发器页面显示没有符合条件的结果。 |
 | Script Properties 复制 | PASSED | 未读取或复制个人项目的任何 Script Properties。 |
 | 首次 Google 授权 | PASSED | 已在新项目中完成首次运行授权；未请求或使用 Gmail 权限。 |
-| 新项目属性配置 | BLOCKED | 已在项目设置中核对为未配置；未写入、未从个人项目复制，也未显示属性值。 |
+| 新项目属性配置 | PASSED | `OPENALEX_API_KEY`、`FEISHU_WEBHOOK`、`FEISHU_SIGN_SECRET` 均已在新项目中配置；未从个人项目复制，报告中不记录属性值。 |
 
 首次同步前，远端只有默认 manifest。本地 manifest 与远端仅在 `executionApi`、`oauthScopes`、`timeZone` 三项存在预期差异；同步会新增 `Code`，不会删除远端脚本文件。
 
+本次新增专用飞书测试函数后，先只读确认远端仍恰好包含两个文件，再执行全量内容更新；更新后再次读取远端，两个文件的 SHA-256 均与本地一致。未使用 `clasp push --force`。
+
 ## 4. Script Properties 需求
 
-| 属性 | 用途 | 是否需用户配置 |
+| 属性 | 用途 | 当前状态 |
 |---|---|---|
-| `OPENALEX_API_KEY` | OpenAlex 连通性、主动检索、来源指标和完整 dry run | 是 |
-| `FEISHU_WEBHOOK` | 专用飞书开发测试群机器人 Webhook | 是 |
-| `FEISHU_SIGN_SECRET` | 飞书机器人启用签名校验时使用 | 可选 |
-| `PUSHED_PAPER_KEYS_V1` | 正式推送去重记录，由程序运行时维护 | 否；测试不得手工写入 |
-| `OPENALEX_WORK_CACHE_V1_*` | OpenAlex work 缓存 | 否；运行时生成 |
-| `OPENALEX_SOURCE_CACHE_V1_*` | OpenAlex source 缓存 | 否；运行时生成 |
+| `OPENALEX_API_KEY` | OpenAlex 连通性、主动检索、来源指标和完整 dry run | 已配置 |
+| `FEISHU_WEBHOOK` | 专用飞书开发测试群机器人 Webhook | 已配置；用户确认属于开发测试群 |
+| `FEISHU_SIGN_SECRET` | 飞书机器人签名校验 | 已配置；签名已启用 |
+| `PUSHED_PAPER_KEYS_V1` | 正式推送去重记录，由程序运行时维护 | 未手工配置；本次测试未写入 |
+| `OPENALEX_WORK_CACHE_V1_*` | OpenAlex work 缓存 | 由新项目运行时维护 |
+| `OPENALEX_SOURCE_CACHE_V1_*` | OpenAlex source 缓存 | 由新项目运行时维护 |
 
-未配置外部凭证时可以运行本地语法、manifest、静态分析和 Node 单元测试，也可离线验证日期范围、评分、OA-Q1 proxy、去重键和消息格式。OpenAlex 主动检索、有效 dry run 与飞书发送必须等待独立测试凭证。
+三个外部属性均只存在于新 Apps Script 项目的 Script Properties 中；本地源码、报告和 Git 历史不包含其值。OpenAlex 测试只使用新项目属性，飞书测试只使用用户确认的专用开发测试群 Webhook。
 
 ## 5. 实际测试函数清单
 
@@ -78,6 +81,7 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | `testFiveYearDateRange()` | 输出动态近五年日期范围 | 否 | 否 | 否 | 否 |
 | `testEveryTwoDaysDryRun()` | 两方向主动检索、评分与最终候选预览 | 是 | 否 | 否（会写新项目缓存） | 否 |
 | `testFeishuPush()` | 发送基础飞书测试消息 | 否 | 是 | 否 | 是 |
+| `testOpenSourceDevFeishuPush()` | 发送一条符合本任务指定标题和说明的开发环境测试消息 | 否 | 是 | 否 | 是 |
 | `testFeishuPushOnePaper()` | 发送单篇 mock 文献消息 | 否 | 是 | 否 | 是 |
 | `testEveryTwoDaysFeishuPush()` | 发送主动检索格式的 mock 消息 | 否 | 是 | 否 | 是 |
 | `testSetupEveryTwoDaysTrigger()` | 删除同名触发器并创建每两日触发器 | 否 | 否 | 否 | 否 |
@@ -85,7 +89,7 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 
 `testEveryTwoDaysDryRun()` 是现有安全 dry run：不发送飞书、不创建触发器、不写 `PUSHED_PAPER_KEYS_V1`。它会在当前新项目中维护 OpenAlex 缓存，不会访问个人项目存储。
 
-现有飞书测试函数的标题和说明不完全符合本任务规定的 `Literature Radar Open Source Dev Test` 文案，因此在没有测试 Webhook 时未执行，也没有擅自修改业务代码或发送不合规测试消息。
+原有飞书测试函数的标题和说明不完全符合本任务规定，因此新增最小独立入口 `testOpenSourceDevFeishuPush()`。该函数只调用现有 `postFeishuText_()` 一次，不访问 OpenAlex 或 Gmail，不创建触发器，也不读写正式去重记录。
 
 ## 6. 测试结果
 
@@ -94,21 +98,21 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | JavaScript / Apps Script 语法 | PASSED | `node --check` 通过。 |
 | `appsscript.json` manifest | PASSED | JSON 解析与远端语义比对通过。 |
 | 未定义函数 / 重复声明 | PASSED | ESLint `no-undef`、`no-redeclare` 无错误。 |
-| 重复函数名 | PASSED | 检查 133 个函数，未发现重复。 |
+| 重复函数名 | PASSED | 检查 134 个函数，未发现重复。 |
 | 配置字段与 Script Properties 名称 | PASSED | 属性常量与调用位置一致。 |
 | 触发器入口 | PASSED | `runEveryTwoDaysOpenAlexPush()` 与 setup 入口存在；未执行 setup。 |
-| 飞书推送函数 | PASSED | `postFeishuText_()` 存在；未发送消息。 |
+| 飞书推送函数 | PASSED | `postFeishuText_()` 及专用测试入口存在；签名测试仅发送一次。 |
 | OpenAlex 主流程 | PASSED | 主流程与两方向检索入口存在。 |
 | 本地 Node 单元测试 | PASSED | 24 项全部通过。 |
 | 评分机制 | PASSED | 本地测试覆盖 relatedness、venue quality、citation、freshness、final score 与 OA-Q1 proxy。 |
 | Apps Script 在线 mock 评分 | PASSED | 在新项目中执行 `testVenueQualityScoring()`，日志显示执行完毕；不依赖外部凭据，不发送消息、不写去重记录、不创建触发器。 |
-| OpenAlex API 连通性 | BLOCKED | 新项目未配置 `OPENALEX_API_KEY`。 |
-| 统计学方向主动检索 | BLOCKED | 新项目未配置 `OPENALEX_API_KEY`。 |
-| 医学机器学习方向主动检索 | BLOCKED | 新项目未配置 `OPENALEX_API_KEY`。 |
-| Apps Script dry run | BLOCKED | 有安全入口，但缺少 `OPENALEX_API_KEY`，未运行空结果测试。 |
-| 飞书单条测试 | BLOCKED | 未配置并确认专用测试群 `FEISHU_WEBHOOK`；现有测试文案亦不满足指定标题。 |
-| 完整流程人工测试 | BLOCKED | OpenAlex、dry run 和飞书前置条件未全部通过。 |
-| 触发器测试 | NOT RUN | 本任务明确禁止创建正式定时触发器。 |
+| OpenAlex API 连通性 | PASSED | 在新项目执行 `testOpenAlexSearchByTitle()`；返回并解析 OpenAlex work JSON，执行完毕，日志未输出完整 API Key。 |
+| 统计学方向主动检索 | PASSED | 执行 `testOpenAlexActiveSearchStatistics()` 并返回候选数组；dry run 中该方向得到 73 个候选。 |
+| 医学机器学习方向主动检索 | PASSED | 执行 `testOpenAlexActiveSearchMedicalML()` 并返回候选数组；dry run 中该方向得到 69 个候选。 |
+| Apps Script dry run | PASSED | `testEveryTwoDaysDryRun()` 共解析 142 个候选，两个方向各输出 1 个最终候选及 relatedness、venue quality、citation、freshness、final score 和 OA-Q1 proxy；未发送消息、未创建触发器、未写正式去重记录。 |
+| 飞书单条测试 | PASSED | 仅执行一次 `testOpenSourceDevFeishuPush()`；指定标题与三条说明完整，Apps Script 日志为“已开始执行 → 执行完毕”，未出现 HTTP 或飞书非零状态错误。 |
+| 完整流程人工测试 | NOT RUN | 现有真实完整流程入口会写正式去重记录，且消息未明确标注开发测试；没有同时满足本任务约束的现有入口，因此未冒险执行，也未扩展为功能重构。 |
+| 触发器测试 | NOT RUN | 本任务明确禁止创建正式定时触发器；只读页面确认当前没有触发器。 |
 
 ## 7. 个人稳定版保护结果
 
@@ -126,14 +130,14 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 
 ## 8. 尚需用户手动完成的事项
 
-Google 登录与新项目首次 Apps Script 授权已在本次验证中完成。尚需：
+Google 登录、首次 Apps Script 授权、三个 Script Properties、OpenAlex 测试和签名飞书测试均已完成。仅需用户在专用测试群中目视确认：
 
-1. 打开 `Literature Radar Open Source Dev` 的“项目设置”→“脚本属性”，添加开发者自己的 `OPENALEX_API_KEY`；不要从个人稳定版复制，也不要把值发到聊天或提交到 Git。
-2. 在飞书创建专用开发测试群和自定义机器人，把该测试机器人的 Webhook 配置为新项目的 `FEISHU_WEBHOOK`。如果启用签名校验，再配置 `FEISHU_SIGN_SECRET`。
-3. 完成后只需告知：`OPENALEX_API_KEY 已配置`、`FEISHU_WEBHOOK 已配置且确认属于开发测试群`、是否启用签名；不要提供完整值。
+1. 只收到 1 条标题为 `Literature Radar Open Source Dev Test` 的消息；
+2. 三行中文说明无乱码、无截断；
+3. 本条纯文本连通性消息未包含链接，因此“链接是否正常”不适用。
 
-后续验证顺序应为：OpenAlex 连通性 → 两方向主动检索 → 评分输出 → 安全 dry run → 符合指定文案的单条飞书测试 → 一次受限完整流程测试。任何阶段都不得创建正式触发器。
+如果测试群没有收到消息，请先反馈执行时间附近的群机器人提示，不要直接重复运行，以免产生重复消息。
 
 ## 9. 是否满足进入配置化重构阶段
 
-**暂不满足。** 独立 GitHub 与 Apps Script 环境已经建立，安全与本地静态验证通过；但 OpenAlex、dry run、飞书和完整流程测试仍因独立测试凭证未配置而阻塞。本任务结束后不自动进入配置化重构。
+**不进入。** 独立 GitHub、Apps Script、Script Properties、OpenAlex、评分、dry run 和单条签名飞书测试已经完成；受限完整流程因没有符合全部安全约束的现有入口而保持 `NOT RUN`。本任务是独立运行验证，不自动进入配置化或功能重构。
