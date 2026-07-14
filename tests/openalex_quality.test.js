@@ -4,12 +4,20 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-function loadCode() {
+function loadCode(options) {
+  const settings = options || {};
   const codePath = path.join(__dirname, '..', 'Code.gs');
   const code = fs.readFileSync(codePath, 'utf8');
+  const propertyValues = Object.assign({}, settings.properties || {});
+  const logs = [];
+  const triggers = (settings.triggers || []).map(function(trigger) {
+    return makeMockTrigger(trigger);
+  });
+  const createdTriggerSpecs = [];
+  const deletedTriggerHandlers = [];
   const sandbox = {
     console,
-    Logger: { log: function() {} },
+    Logger: { log: function(value) { logs.push(String(value)); } },
     Utilities: {
       DigestAlgorithm: { SHA_256: 'SHA_256' },
       Charset: { UTF_8: 'UTF_8' },
@@ -25,9 +33,10 @@ function loadCode() {
     PropertiesService: {
       getScriptProperties: function() {
         return {
-          getProperty: function() { return ''; },
-          setProperty: function() {},
-          deleteProperty: function() {}
+          getProperty: function(name) { return propertyValues[name] || ''; },
+          getProperties: function() { return Object.assign({}, propertyValues); },
+          setProperty: function(name, value) { propertyValues[name] = String(value); },
+          deleteProperty: function(name) { delete propertyValues[name]; }
         };
       }
     },
@@ -40,16 +49,29 @@ function loadCode() {
       }
     },
     ScriptApp: {
-      getProjectTriggers: function() { return []; },
-      deleteTrigger: function() {},
-      newTrigger: function() {
+      getScriptId: function() { return settings.scriptId || 'test-script-id'; },
+      getProjectTriggers: function() { return triggers.slice(); },
+      deleteTrigger: function(trigger) {
+        const index = triggers.indexOf(trigger);
+        if (index !== -1) {
+          deletedTriggerHandlers.push(trigger.getHandlerFunction());
+          triggers.splice(index, 1);
+        }
+      },
+      newTrigger: function(handlerFunction) {
+        const spec = { handlerFunction };
         return {
-          timeBased: function() { return this; },
-          inTimezone: function() { return this; },
-          everyDays: function() { return this; },
-          atHour: function() { return this; },
-          nearMinute: function() { return this; },
-          create: function() { return this; }
+          timeBased: function() { spec.triggerSource = 'CLOCK'; spec.eventType = 'CLOCK'; return this; },
+          inTimezone: function(value) { spec.timezone = value; return this; },
+          everyDays: function(value) { spec.everyDays = value; return this; },
+          atHour: function(value) { spec.atHour = value; return this; },
+          nearMinute: function(value) { spec.nearMinute = value; return this; },
+          create: function() {
+            createdTriggerSpecs.push(Object.assign({}, spec));
+            const trigger = makeMockTrigger(spec);
+            triggers.push(trigger);
+            return trigger;
+          }
         };
       }
     },
@@ -83,12 +105,41 @@ function loadCode() {
         buildOpenAlexWorksQueries_: typeof buildOpenAlexWorksQueries_ === 'function' ? buildOpenAlexWorksQueries_ : undefined,
         dedupeOpenAlexWorks_: typeof dedupeOpenAlexWorks_ === 'function' ? dedupeOpenAlexWorks_ : undefined,
         getOpenAlexRetryAfterMs_: typeof getOpenAlexRetryAfterMs_ === 'function' ? getOpenAlexRetryAfterMs_ : undefined,
+        buildOpenSourceDevMessage_: typeof buildOpenSourceDevMessage_ === 'function' ? buildOpenSourceDevMessage_ : undefined,
+        validateOpenSourceDevEnvironment_: typeof validateOpenSourceDevEnvironment_ === 'function' ? validateOpenSourceDevEnvironment_ : undefined,
+        getDevTestPushedKeys_: typeof getDevTestPushedKeys_ === 'function' ? getDevTestPushedKeys_ : undefined,
+        saveDevTestSelections_: typeof saveDevTestSelections_ === 'function' ? saveDevTestSelections_ : undefined,
+        clearDevTestDedupRecords_: typeof clearDevTestDedupRecords_ === 'function' ? clearDevTestDedupRecords_ : undefined,
+        setupOpenSourceDevTrigger_: typeof setupOpenSourceDevTrigger_ === 'function' ? setupOpenSourceDevTrigger_ : undefined,
+        listOpenSourceDevTriggers: typeof listOpenSourceDevTriggers === 'function' ? listOpenSourceDevTriggers : undefined,
+        removeOpenSourceDevTrigger_: typeof removeOpenSourceDevTrigger_ === 'function' ? removeOpenSourceDevTrigger_ : undefined,
+        OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_: typeof OPEN_SOURCE_DEV_SCRIPT_ID_SHA256 !== 'undefined' ? OPEN_SOURCE_DEV_SCRIPT_ID_SHA256 : undefined,
         CONFIG_: typeof CONFIG !== 'undefined' ? CONFIG : undefined
       };
     `,
     sandbox
   );
+  sandbox.__exports__.__state = {
+    properties: propertyValues,
+    logs,
+    triggers,
+    createdTriggerSpecs,
+    deletedTriggerHandlers
+  };
   return sandbox.__exports__;
+}
+
+function makeMockTrigger(spec) {
+  const values = Object.assign({
+    handlerFunction: '',
+    eventType: 'CLOCK',
+    triggerSource: 'CLOCK'
+  }, spec || {});
+  return {
+    getHandlerFunction: function() { return values.handlerFunction; },
+    getEventType: function() { return values.eventType; },
+    getTriggerSource: function() { return values.triggerSource; }
+  };
 }
 
 function test(name, fn) {
@@ -560,6 +611,111 @@ test('dedupes chunked OpenAlex works and keeps the most cited results first', fu
 test('parses OpenAlex retryAfter seconds for one bounded retry', function() {
   assert.strictEqual(api.getOpenAlexRetryAfterMs_('{"retryAfter":1}'), 1200);
   assert.strictEqual(api.getOpenAlexRetryAfterMs_('not json'), 1200);
+});
+
+test('builds a clearly labeled development full-flow message', function() {
+  const message = api.buildOpenSourceDevMessage_([
+    {
+      direction: { label: '生存分析领域' },
+      paper: Object.assign(makePaper('Development survival paper', 'Statistics in Medicine', 8, 100, 200), {
+        paperKey: 'survival-key',
+        relatedness_score_norm: 0.8,
+        venue_quality_score: 0.9,
+        citation_score: 0.7,
+        freshness_score: 1,
+        final_score: 0.84,
+        OA_Q1_PROXY: true,
+        whyRecommended: 'Development test selection.'
+      })
+    },
+    {
+      direction: { label: '医学与机器学习交叉方向' },
+      paper: Object.assign(makePaper('Development clinical AI paper', 'npj Digital Medicine', 9, 120, 300), {
+        paperKey: 'medical-ml-key',
+        relatedness_score_norm: 0.82,
+        venue_quality_score: 0.92,
+        citation_score: 0.75,
+        freshness_score: 1,
+        final_score: 0.86,
+        OA_Q1_PROXY: true,
+        whyRecommended: 'Development test selection.'
+      })
+    }
+  ], 2);
+
+  assert.ok(message.includes('Literature Radar Open Source Dev Test'));
+  assert.ok(message.includes('这是开源开发环境的完整流程测试，不是正式推荐任务。'));
+  assert.ok(message.includes('Development survival paper'));
+  assert.ok(message.includes('Development clinical AI paper'));
+});
+
+test('requires the isolated development script fingerprint and project properties', function() {
+  assert.strictEqual(
+    api.validateOpenSourceDevEnvironment_(api.OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_, 'test-api-key', 'https://example.org/dev-webhook'),
+    true
+  );
+  assert.throws(function() {
+    api.validateOpenSourceDevEnvironment_('wrong-script', 'test-api-key', 'https://example.org/dev-webhook');
+  }, /Script ID/);
+  assert.throws(function() {
+    api.validateOpenSourceDevEnvironment_(api.OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_, '', 'https://example.org/dev-webhook');
+  }, /OpenAlex API Key/);
+  assert.throws(function() {
+    api.validateOpenSourceDevEnvironment_(api.OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_, 'test-api-key', '');
+  }, /Webhook/);
+});
+
+test('keeps development deduplication separate from formal history', function() {
+  const isolatedApi = loadCode({
+    properties: {
+      PUSHED_PAPER_KEYS_V1: '["formal-key"]',
+      DEV_TEST_SENT_PAPER_KEYS_V1: '["old-dev-key"]'
+    }
+  });
+
+  assert.strictEqual(JSON.stringify(isolatedApi.getDevTestPushedKeys_()), '["old-dev-key"]');
+  isolatedApi.saveDevTestSelections_(['old-dev-key'], [
+    { paper: { paperKey: 'new-dev-key' } }
+  ]);
+  assert.strictEqual(isolatedApi.__state.properties.PUSHED_PAPER_KEYS_V1, '["formal-key"]');
+  assert.strictEqual(isolatedApi.__state.properties.DEV_TEST_SENT_PAPER_KEYS_V1, '["new-dev-key","old-dev-key"]');
+
+  isolatedApi.clearDevTestDedupRecords_();
+  assert.strictEqual(isolatedApi.__state.properties.PUSHED_PAPER_KEYS_V1, '["formal-key"]');
+  assert.strictEqual(typeof isolatedApi.__state.properties.DEV_TEST_SENT_PAPER_KEYS_V1, 'undefined');
+});
+
+test('replaces and removes only the development scheduled trigger', function() {
+  const triggerApi = loadCode({
+    triggers: [
+      { handlerFunction: 'runEveryTwoDaysOpenAlexPush' },
+      { handlerFunction: 'runOpenSourceDevScheduledTest' },
+      { handlerFunction: 'runOpenSourceDevScheduledTest' }
+    ]
+  });
+
+  const before = triggerApi.listOpenSourceDevTriggers();
+  assert.strictEqual(before.length, 3);
+  assert.strictEqual(before.filter(function(trigger) { return trigger.isDevelopmentTest; }).length, 2);
+
+  triggerApi.setupOpenSourceDevTrigger_();
+  assert.strictEqual(triggerApi.__state.triggers.length, 2);
+  assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 2);
+  assert.deepStrictEqual(triggerApi.__state.createdTriggerSpecs[0], {
+    handlerFunction: 'runOpenSourceDevScheduledTest',
+    triggerSource: 'CLOCK',
+    eventType: 'CLOCK',
+    timezone: 'Asia/Shanghai',
+    everyDays: 2,
+    atHour: 7,
+    nearMinute: 30
+  });
+
+  const removal = triggerApi.removeOpenSourceDevTrigger_();
+  assert.strictEqual(removal.deletedCount, 1);
+  assert.strictEqual(removal.remainingCount, 0);
+  assert.strictEqual(triggerApi.__state.triggers.length, 1);
+  assert.strictEqual(triggerApi.__state.triggers[0].getHandlerFunction(), 'runEveryTwoDaysOpenAlexPush');
 });
 
 function mockOpenAlexWork() {

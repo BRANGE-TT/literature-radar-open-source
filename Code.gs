@@ -159,6 +159,9 @@ const PROP_PUSHED_KEYS = 'PUSHED_PAPER_KEYS_V1';
 const PROP_FEISHU_WEBHOOK = 'FEISHU_WEBHOOK';
 const PROP_FEISHU_SIGN_SECRET = 'FEISHU_SIGN_SECRET';
 const PROP_OPENALEX_API_KEY = 'OPENALEX_API_KEY';
+const PROP_DEV_TEST_PUSHED_KEYS = 'DEV_TEST_SENT_PAPER_KEYS_V1';
+const OPEN_SOURCE_DEV_SCRIPT_ID_SHA256 = 'f37d7cbb0d5eac6438c45c05a8bd46032ba2aeb33718d869297cb1e3a490bfe6';
+const OPEN_SOURCE_DEV_SCHEDULED_HANDLER = 'runOpenSourceDevScheduledTest';
 const OPENALEX_WORK_CACHE_PREFIX = 'OPENALEX_WORK_CACHE_V1_';
 const OPENALEX_SOURCE_CACHE_PREFIX = 'OPENALEX_SOURCE_CACHE_V1_';
 const UNKNOWN_SOURCE = 'UNKNOWN_SOURCE';
@@ -370,11 +373,175 @@ function deleteEveryTwoDaysTriggers_() {
 }
 
 /**
+ * 创建开源开发环境每两日早上约 7:30 的测试触发器。
+ * 重复执行只会替换同一个开发测试入口的触发器。
+ */
+function setupOpenSourceDevTrigger() {
+  assertOpenSourceDevEnvironment_();
+  return setupOpenSourceDevTrigger_();
+}
+
+/**
+ * 创建开发测试触发器的内部实现，供本地隔离测试使用。
+ */
+function setupOpenSourceDevTrigger_() {
+  const existing = getOpenSourceDevTriggers_();
+  existing.forEach(function(trigger) {
+    ScriptApp.deleteTrigger(trigger);
+  });
+
+  ScriptApp.newTrigger(OPEN_SOURCE_DEV_SCHEDULED_HANDLER)
+    .timeBased()
+    .inTimezone(CONFIG.TIMEZONE)
+    .everyDays(2)
+    .atHour(7)
+    .nearMinute(30)
+    .create();
+
+  const result = {
+    handlerFunction: OPEN_SOURCE_DEV_SCHEDULED_HANDLER,
+    triggerType: 'time-based',
+    interval: 'every 2 days',
+    approximateHour: 7,
+    approximateMinute: 30,
+    timezone: CONFIG.TIMEZONE,
+    replacedExistingCount: existing.length,
+    nextRun: 'Apps Script 不提供精确下次运行时间；预计在后续符合每两日、早上约 7:30 的窗口运行。'
+  };
+  Logger.log(JSON.stringify(result));
+  return result;
+}
+
+/**
+ * 只读列出当前项目全部触发器，并标记开发测试触发器。
+ */
+function listOpenSourceDevTriggers() {
+  const descriptions = ScriptApp.getProjectTriggers().map(function(trigger) {
+    const handlerFunction = trigger.getHandlerFunction();
+    return {
+      handlerFunction: handlerFunction,
+      eventType: String(trigger.getEventType()),
+      triggerSource: String(trigger.getTriggerSource()),
+      isDevelopmentTest: handlerFunction === OPEN_SOURCE_DEV_SCHEDULED_HANDLER
+    };
+  });
+  Logger.log(JSON.stringify(descriptions));
+  return descriptions;
+}
+
+/**
+ * 删除开源开发环境测试触发器，不影响其他 handler。
+ */
+function removeOpenSourceDevTrigger() {
+  assertOpenSourceDevEnvironment_();
+  return removeOpenSourceDevTrigger_();
+}
+
+/**
+ * 删除开发测试触发器的内部实现，供本地隔离测试使用。
+ */
+function removeOpenSourceDevTrigger_() {
+  const targets = getOpenSourceDevTriggers_();
+  Logger.log('准备删除的开发测试触发器数量：' + targets.length);
+  targets.forEach(function(trigger) {
+    ScriptApp.deleteTrigger(trigger);
+  });
+  const remainingCount = getOpenSourceDevTriggers_().length;
+  Logger.log('删除后剩余的开发测试触发器数量：' + remainingCount);
+  return {
+    deletedCount: targets.length,
+    remainingCount: remainingCount
+  };
+}
+
+/**
+ * 读取当前项目中仅指向开发调度入口的触发器。
+ */
+function getOpenSourceDevTriggers_() {
+  return ScriptApp.getProjectTriggers().filter(function(trigger) {
+    return trigger.getHandlerFunction() === OPEN_SOURCE_DEV_SCHEDULED_HANDLER;
+  });
+}
+
+/**
  * 测试飞书 Webhook 是否配置正确。
  */
 function testFeishuPush() {
   const nowText = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm:ss');
   postFeishuText_('Google Scholar Alert 文献推送测试\n时间：' + nowText + '\n如果你能看到这条消息，说明 Webhook 可用。');
+}
+
+/**
+ * 手动执行开源开发环境完整流程测试。
+ * 仅使用开发测试去重记录，不创建触发器，也不写入正式去重记录。
+ */
+function runOpenSourceDevFullFlowTest() {
+  return runOpenSourceDevFullFlow_('manual');
+}
+
+/**
+ * 开源开发环境定时触发入口。
+ * 该入口与正式触发器隔离，并始终使用开发测试标识和去重记录。
+ */
+function runOpenSourceDevScheduledTest() {
+  return runOpenSourceDevFullFlow_('scheduled');
+}
+
+/**
+ * 复用现有检索、评分、筛选和推送逻辑执行开发环境完整流程。
+ */
+function runOpenSourceDevFullFlow_(runMode) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    Logger.log('已有任务正在运行，本次开发测试跳过。');
+    return null;
+  }
+
+  try {
+    const environment = assertOpenSourceDevEnvironment_();
+    pruneOpenAlexCaches_();
+    const pushedKeys = getDevTestPushedKeys_();
+    const reservedKeys = {};
+    const selections = [];
+    let parsedCount = 0;
+
+    CONFIG.DIRECTIONS.forEach(function(direction) {
+      const candidates = searchOpenAlexWorksByDirection_(direction, environment.apiKey, pushedKeys);
+      parsedCount += candidates.length;
+      const selected = selectBestPaperForDirection_(candidates, direction, pushedKeys, reservedKeys);
+      if (selected && selected.paperKey) {
+        reservedKeys[selected.paperKey] = true;
+      }
+      selections.push({
+        direction: direction,
+        paper: selected
+      });
+    });
+
+    const selectedCount = selections.filter(function(selection) {
+      return !!selection.paper;
+    }).length;
+    if (selectedCount !== CONFIG.DIRECTIONS.length) {
+      throw new Error('开发完整流程未取得两个方向的推荐，未发送消息，也未写入开发测试去重记录。');
+    }
+
+    const message = buildOpenSourceDevMessage_(selections, parsedCount);
+    const feishuResult = postFeishuText_(message);
+    const dedupWritten = saveDevTestSelectionsSafely_(pushedKeys, selections);
+    logOpenSourceDevFullFlowResult_(runMode, selections, parsedCount, feishuResult, dedupWritten);
+    return {
+      runMode: runMode,
+      parsedCount: parsedCount,
+      selections: selections,
+      feishuResult: feishuResult,
+      dedupWritten: dedupWritten
+    };
+  } catch (err) {
+    Logger.log(err && err.stack ? err.stack : err);
+    throw err;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -416,6 +583,22 @@ function previewScholarPapers() {
 function clearPushedHistory() {
   PropertiesService.getScriptProperties().deleteProperty(PROP_PUSHED_KEYS);
   Logger.log('已清空历史推送记录。');
+}
+
+/**
+ * 清理开源开发环境测试去重记录，不影响正式推送历史。
+ */
+function clearDevTestDedupRecords() {
+  assertOpenSourceDevEnvironment_();
+  clearDevTestDedupRecords_();
+}
+
+/**
+ * 清理开发测试去重记录的内部实现，供本地隔离测试使用。
+ */
+function clearDevTestDedupRecords_() {
+  PropertiesService.getScriptProperties().deleteProperty(PROP_DEV_TEST_PUSHED_KEYS);
+  Logger.log('已清理 DEV_TEST_ 开发测试去重记录；正式去重记录未修改。');
 }
 
 /**
@@ -1567,11 +1750,18 @@ function makeOpenAlexCachePropertyName_(prefix, rawKey) {
  * 生成短哈希。
  */
 function makeShortHash_(text) {
+  return makeSha256Hex_(text).slice(0, 32);
+}
+
+/**
+ * 生成完整 SHA-256 十六进制指纹。
+ */
+function makeSha256Hex_(text) {
   const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text), Utilities.Charset.UTF_8);
   return bytes.map(function(byte) {
     const value = byte < 0 ? byte + 256 : byte;
     return ('0' + value.toString(16)).slice(-2);
-  }).join('').slice(0, 32);
+  }).join('');
 }
 
 /**
@@ -2256,13 +2446,16 @@ function getPublicationDate_(paper) {
 function buildFeishuMessage_(selections, parsedCount, options) {
   const messageOptions = options || {};
   const today = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd');
-  const parts = [
-    messageOptions.title || 'Google Scholar Alert 今日英文文献推荐',
+  const parts = [messageOptions.title || 'Google Scholar Alert 今日英文文献推荐'];
+  if (messageOptions.notice) {
+    parts.push(messageOptions.notice);
+  }
+  parts.push(
     '日期：' + today,
     '候选解析数：' + parsedCount,
     'Data Source: ' + (messageOptions.sourceDescription || 'Google Scholar Alert, with optional OpenAlex enrichment.'),
     ''
-  ];
+  );
 
   selections.forEach(function(selection) {
     parts.push('【' + selection.direction.label + '】');
@@ -2302,6 +2495,18 @@ function buildFeishuMessage_(selections, parsedCount, options) {
   });
 
   return parts.join('\n');
+}
+
+/**
+ * 构建带明确开发测试标识的双方向完整流程消息。
+ */
+function buildOpenSourceDevMessage_(selections, parsedCount) {
+  return buildFeishuMessage_(selections, parsedCount, {
+    title: 'Literature Radar Open Source Dev Test',
+    notice: '这是开源开发环境的完整流程测试，不是正式推荐任务。',
+    sourceDescription: 'OpenAlex active search over the last five years in the isolated open-source development project.',
+    noResultReason: '开发测试未取得合适候选；本次不会发送部分结果，也不会写入开发测试去重记录。'
+  });
 }
 
 /**
@@ -2392,8 +2597,10 @@ function postFeishuText_(text) {
     throw new Error('飞书推送失败，HTTP 状态码：' + status + '，响应：' + body);
   }
 
+  let feishuCode = null;
   try {
     const json = JSON.parse(body);
+    feishuCode = typeof json.code !== 'undefined' ? json.code : null;
     if (typeof json.code !== 'undefined' && json.code !== 0) {
       throw new Error('飞书返回错误：' + body);
     }
@@ -2403,7 +2610,10 @@ function postFeishuText_(text) {
     }
   }
 
-  return body;
+  return {
+    httpStatus: status,
+    feishuCode: feishuCode
+  };
 }
 
 /**
@@ -2428,6 +2638,37 @@ function getConfiguredValue_(propertyName, configValue) {
 }
 
 /**
+ * 确认当前运行项目就是隔离的开源开发版，并且凭证来自该项目的脚本属性。
+ */
+function assertOpenSourceDevEnvironment_() {
+  const scriptProperties = PropertiesService.getScriptProperties();
+  const apiKey = scriptProperties.getProperty(PROP_OPENALEX_API_KEY);
+  const webhook = scriptProperties.getProperty(PROP_FEISHU_WEBHOOK);
+  const scriptIdHash = makeSha256Hex_(ScriptApp.getScriptId());
+  validateOpenSourceDevEnvironment_(scriptIdHash, apiKey, webhook);
+  Logger.log('开源开发环境检查通过；未输出 Script ID 或凭证。');
+  return {
+    apiKey: apiKey
+  };
+}
+
+/**
+ * 校验开发环境边界，使用 Script ID 指纹而不是在代码中保存完整 ID。
+ */
+function validateOpenSourceDevEnvironment_(scriptIdHash, apiKey, webhook) {
+  if (scriptIdHash !== OPEN_SOURCE_DEV_SCRIPT_ID_SHA256) {
+    throw new Error('当前 Script ID 不属于开源开发版，已停止开发测试。');
+  }
+  if (!apiKey) {
+    throw new Error('开源开发项目未配置 OpenAlex API Key，已停止开发测试。');
+  }
+  if (!webhook || webhook === 'PASTE_YOUR_FEISHU_WEBHOOK_HERE') {
+    throw new Error('开源开发项目未配置飞书 Webhook，已停止开发测试。');
+  }
+  return true;
+}
+
+/**
  * 读取历史推送指纹。
  */
 function getPushedKeys_() {
@@ -2441,6 +2682,24 @@ function getPushedKeys_() {
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
     Logger.log('历史推送记录解析失败，将从空记录开始：' + err);
+    return [];
+  }
+}
+
+/**
+ * 读取与正式历史隔离的开发测试推送指纹。
+ */
+function getDevTestPushedKeys_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(PROP_DEV_TEST_PUSHED_KEYS);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    Logger.log('开发测试去重记录解析失败，将从空记录开始：' + err);
     return [];
   }
 }
@@ -2470,6 +2729,60 @@ function savePushedSelectionsSafely_(pushedKeys, selections) {
   } catch (err) {
     Logger.log('推送已成功，但保存文献去重记录失败：' + (err && err.stack ? err.stack : err));
   }
+}
+
+/**
+ * 保存开发测试推送指纹，不写入正式去重属性。
+ */
+function saveDevTestSelections_(pushedKeys, selections) {
+  const nextKeys = pushedKeys.slice();
+  selections.forEach(function(selection) {
+    if (selection.paper && selection.paper.paperKey && nextKeys.indexOf(selection.paper.paperKey) === -1) {
+      nextKeys.unshift(selection.paper.paperKey);
+    }
+  });
+  const trimmed = nextKeys.slice(0, CONFIG.MAX_PUSHED_KEYS);
+  PropertiesService.getScriptProperties().setProperty(PROP_DEV_TEST_PUSHED_KEYS, JSON.stringify(trimmed));
+}
+
+/**
+ * 仅在飞书发送成功后调用；返回开发测试去重记录是否写入成功。
+ */
+function saveDevTestSelectionsSafely_(pushedKeys, selections) {
+  try {
+    saveDevTestSelections_(pushedKeys, selections);
+    return true;
+  } catch (err) {
+    Logger.log('开发测试消息已成功发送，但保存开发测试去重记录失败：' + (err && err.stack ? err.stack : err));
+    return false;
+  }
+}
+
+/**
+ * 记录开发完整流程结果，不输出 Script ID、Webhook 或 API Key。
+ */
+function logOpenSourceDevFullFlowResult_(runMode, selections, parsedCount, feishuResult, dedupWritten) {
+  selections.forEach(function(selection) {
+    const paper = selection.paper;
+    Logger.log(JSON.stringify({
+      runMode: runMode,
+      direction: selection.direction.label,
+      title: paper.title,
+      source: getPaperVenueName_(paper),
+      publicationDate: paper.publicationDate || getPublicationDate_(paper),
+      doiOrOpenAlexId: paper.doi || paper.openalex && (paper.openalex.doi || paper.openalex.openalex_work_id) || '',
+      relatednessScore: paper.relatedness_score_norm,
+      venueQualityScore: paper.venue_quality_score,
+      citationScore: paper.citation_score,
+      freshnessScore: paper.freshness_score,
+      finalScore: paper.final_score,
+      oaQ1Proxy: paper.OA_Q1_PROXY,
+      parsedCount: parsedCount,
+      feishuHttpStatus: feishuResult.httpStatus,
+      feishuCode: feishuResult.feishuCode,
+      devTestDedupWritten: dedupWritten
+    }));
+  });
 }
 
 /**

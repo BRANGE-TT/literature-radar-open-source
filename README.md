@@ -137,6 +137,21 @@ Get-Content -Raw -Encoding UTF8 Code.gs | node --check -
 node -e "JSON.parse(require('fs').readFileSync('appsscript.json','utf8')); console.log('manifest ok')"
 ```
 
+## 开源开发环境完整流程测试
+
+以下入口仅用于当前隔离的开源开发项目验证，不是正式用户安装方式：
+
+- `testEveryTwoDaysDryRun()`：预览双方向筛选结果，不发送消息、不写去重记录。
+- `runOpenSourceDevFullFlowTest()`：发送一条包含两个方向各一篇文献的开发测试消息。
+- `listOpenSourceDevTriggers()`：只读列出当前项目触发器并标记开发测试触发器。
+- `setupOpenSourceDevTrigger()`：仅替换 `runOpenSourceDevScheduledTest` 对应的开发触发器，设置为每两日早上约 7:30 运行。
+- `removeOpenSourceDevTrigger()`：仅删除开发测试触发器。
+- `clearDevTestDedupRecords()`：仅清理开发测试去重记录。
+
+开发完整流程会先校验当前 Apps Script 项目的 Script ID 指纹，并要求 `OPENALEX_API_KEY` 和 `FEISHU_WEBHOOK` 来自该开发项目的 Script Properties。测试消息固定带有 `Literature Radar Open Source Dev Test` 标识。开发记录保存在 `DEV_TEST_SENT_PAPER_KEYS_V1`，不会读取、写入或清理正式去重属性 `PUSHED_PAPER_KEYS_V1`。
+
+创建触发器属于写操作，只能在完整流程消息人工确认通过后执行。Apps Script 的 `nearMinute(30)` 只能保证约 7:30；创建后的首次自动运行结果必须等待实际观察，不能预先视为通过。
+
 ## 如何设置两日触发器
 
 运行：

@@ -86,6 +86,11 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | `testEveryTwoDaysFeishuPush()` | 发送主动检索格式的 mock 消息 | 否 | 是 | 否 | 是 |
 | `testSetupEveryTwoDaysTrigger()` | 删除同名触发器并创建每两日触发器 | 否 | 否 | 否 | 否 |
 | `runEveryTwoDaysOpenAlexPush()` | 正式完整流程入口 | 是 | 是 | 是 | 是 |
+| `runOpenSourceDevFullFlowTest()` | 手动开发完整流程 | 是 | 是 | 否；只写开发测试记录 | 是 |
+| `runOpenSourceDevScheduledTest()` | 开发触发器执行入口 | 是 | 是 | 否；只写开发测试记录 | 是 |
+| `listOpenSourceDevTriggers()` | 只读列出并标记开发触发器 | 否 | 否 | 否 | 否 |
+| `setupOpenSourceDevTrigger()` | 仅替换开发 handler 的每两日触发器 | 否 | 否 | 否 | 否 |
+| `removeOpenSourceDevTrigger()` | 仅删除开发 handler 的触发器 | 否 | 否 | 否 | 否 |
 
 `testEveryTwoDaysDryRun()` 是现有安全 dry run：不发送飞书、不创建触发器、不写 `PUSHED_PAPER_KEYS_V1`。它会在当前新项目中维护 OpenAlex 缓存，不会访问个人项目存储。
 
@@ -98,12 +103,12 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | JavaScript / Apps Script 语法 | PASSED | `node --check` 通过。 |
 | `appsscript.json` manifest | PASSED | JSON 解析与远端语义比对通过。 |
 | 未定义函数 / 重复声明 | PASSED | ESLint `no-undef`、`no-redeclare` 无错误。 |
-| 重复函数名 | PASSED | 检查 134 个函数，未发现重复。 |
+| 重复函数名 | PASSED | 检查 153 个函数，未发现重复。 |
 | 配置字段与 Script Properties 名称 | PASSED | 属性常量与调用位置一致。 |
 | 触发器入口 | PASSED | `runEveryTwoDaysOpenAlexPush()` 与 setup 入口存在；未执行 setup。 |
 | 飞书推送函数 | PASSED | `postFeishuText_()` 及专用测试入口存在；签名测试仅发送一次。 |
 | OpenAlex 主流程 | PASSED | 主流程与两方向检索入口存在。 |
-| 本地 Node 单元测试 | PASSED | 24 项全部通过。 |
+| 本地 Node 单元测试 | PASSED | 当前 28 项全部通过；新增 4 项覆盖开发消息标识、项目边界、去重隔离和触发器管理。 |
 | 评分机制 | PASSED | 本地测试覆盖 relatedness、venue quality、citation、freshness、final score 与 OA-Q1 proxy。 |
 | Apps Script 在线 mock 评分 | PASSED | 在新项目中执行 `testVenueQualityScoring()`，日志显示执行完毕；不依赖外部凭据，不发送消息、不写去重记录、不创建触发器。 |
 | OpenAlex API 连通性 | PASSED | 在新项目执行 `testOpenAlexSearchByTitle()`；返回并解析 OpenAlex work JSON，执行完毕，日志未输出完整 API Key。 |
@@ -111,8 +116,8 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 | 医学机器学习方向主动检索 | PASSED | 执行 `testOpenAlexActiveSearchMedicalML()` 并返回候选数组；dry run 中该方向得到 69 个候选。 |
 | Apps Script dry run | PASSED | `testEveryTwoDaysDryRun()` 共解析 142 个候选，两个方向各输出 1 个最终候选及 relatedness、venue quality、citation、freshness、final score 和 OA-Q1 proxy；未发送消息、未创建触发器、未写正式去重记录。 |
 | 飞书单条测试 | PASSED | 仅执行一次 `testOpenSourceDevFeishuPush()`；指定标题与三条说明完整，Apps Script 日志为“已开始执行 → 执行完毕”，未出现 HTTP 或飞书非零状态错误。 |
-| 完整流程人工测试 | NOT RUN | 现有真实完整流程入口会写正式去重记录，且消息未明确标注开发测试；没有同时满足本任务约束的现有入口，因此未冒险执行，也未扩展为功能重构。 |
-| 触发器测试 | NOT RUN | 本任务明确禁止创建正式定时触发器；只读页面确认当前没有触发器。 |
+| 完整流程人工测试 | PASSED | 用户在 Apps Script 编辑器中手动执行一次；运行时项目检查通过，两个方向均返回 HTTP 200、飞书状态码 0，并写入独立开发测试去重记录。飞书截图确认双方向内容完整。 |
+| 触发器测试 | PASSED / CREATED | 用户在停止点 4 明确确认后，于 Apps Script 编辑器执行创建函数；日志确认开发 handler、每两日、Asia/Shanghai、约 07:30，随后只读列表确认当前仅 1 个开发触发器。 |
 
 ## 7. 个人稳定版保护结果
 
@@ -130,14 +135,50 @@ GitHub 私人仓库已创建并完成普通首次推送。本地 `main`、`origi
 
 ## 8. 尚需用户手动完成的事项
 
-Google 登录、首次 Apps Script 授权、三个 Script Properties、OpenAlex 测试和签名飞书测试均已完成。仅需用户在专用测试群中目视确认：
+用户已于 2026-07-14 根据飞书开发测试群截图完成人工确认：
 
-1. 只收到 1 条标题为 `Literature Radar Open Source Dev Test` 的消息；
-2. 三行中文说明无乱码、无截断；
-3. 本条纯文本连通性消息未包含链接，因此“链接是否正常”不适用。
+1. 收到 1 条标题为 `Literature Radar Open Source Dev Test` 的消息；
+2. 中英文完整，无乱码、截断或布局异常；
+3. 消息明确标注为开发测试；
+4. 消息只出现在开发测试群，未发送到个人正式推送群；
+5. 本条纯文本连通性消息未包含链接，因此链接检查不适用。
 
-如果测试群没有收到消息，请先反馈执行时间附近的群机器人提示，不要直接重复运行，以免产生重复消息。
+用户随后于 2026-07-14 根据执行日志和开发测试群截图完成双方向完整流程确认：
+
+1. `runMode` 为 `manual`，运行时开发项目边界检查通过，未输出 Script ID 或凭证；
+2. 共解析 142 个候选，生存分析与医学机器学习交叉方向各输出 1 篇；
+3. 两个方向均返回 HTTP 200、飞书状态码 0，且 `devTestDedupWritten` 为 `true`；
+4. 消息标题、开发环境说明、作者、来源、日期、DOI、评分及 OA-Q1 proxy 声明完整；
+5. 两个 DOI 链接均显示为可点击状态，截图未见乱码、截断或消息错位。
+
+用户明确要求不等待未来窗口后，于 2026-07-14 20:47 人工执行实际定时 handler `runOpenSourceDevScheduledTest()` 完成等价验证：
+
+1. 日志中的 `runMode` 为 `scheduled`，运行时开发环境检查通过；
+2. 生存分析方向选择 JAMA 文献，Final Score 为 0.72；
+3. 医学与机器学习交叉方向选择 Scientific Reports 文献，Final Score 为 0.78；
+4. 两个方向均返回 HTTP 200、飞书状态码 0，且 `devTestDedupWritten` 为 `true`；
+5. 20:55 再次执行只读列表，仍仅有 1 个 `CLOCK` 类型开发触发器。
 
 ## 9. 是否满足进入配置化重构阶段
 
-**不进入。** 独立 GitHub、Apps Script、Script Properties、OpenAlex、评分、dry run 和单条签名飞书测试已经完成；受限完整流程因没有符合全部安全约束的现有入口而保持 `NOT RUN`。本任务是独立运行验证，不自动进入配置化或功能重构。
+**仍不进入。** 独立 GitHub、Apps Script、Script Properties、OpenAlex、评分、dry run、单条签名飞书测试、开发完整流程和开发触发器创建均已通过；当前仅等待首次自动运行观察。本任务不自动进入配置化或功能重构。
+
+## 10. 开发完整流程与触发器准备状态
+
+更新日期：2026-07-14
+
+| 检查项 | 状态 | 结果 |
+|---|---|---|
+| 正式主流程安全审计 | PASSED | 正式入口发送成功后才写正式去重记录，不创建触发器，也不输出凭证；但缺少开发标识、开发项目校验和独立测试去重，因此未直接用于开发完整流程。 |
+| Apps Script 增量同步 | PASSED | 用户确认停止点 2 后，仅同步 `Code` 与 `appsscript`；远端回读哈希与本地一致，未使用 `--force`。 |
+| 开发完整流程入口 | PASSED | 用户在 Apps Script 编辑器中手动执行 `runOpenSourceDevFullFlowTest()` 一次；两个方向各选出一篇并成功发送。此前失败的自动化 OAuth 登录未被绕过。 |
+| 开发项目边界 | PASSED | 运行时项目检查通过；日志明确未输出 Script ID 或凭证。 |
+| 开发测试去重 | PASSED | 两个方向日志均显示 `devTestDedupWritten: true`；使用独立属性 `DEV_TEST_SENT_PAPER_KEYS_V1`，不写正式去重记录。 |
+| 飞书开发标识 | PASSED | 截图确认消息包含 `Literature Radar Open Source Dev Test` 和“不是正式推荐任务”说明。 |
+| 开发触发器管理 | PASSED / CREATED | 创建日志显示 handler 为 `runOpenSourceDevScheduledTest`、每 2 天、Asia/Shanghai、约 07:30，`replacedExistingCount` 为 0；只读列表仅返回 1 个 `CLOCK` 类型开发触发器。 |
+| 等价人工触发验证 | PASSED | 人工执行实际定时 handler 一次，日志为 `runMode: scheduled`；两个方向均返回 HTTP 200、飞书状态码 0，并写入独立开发去重。验证后触发器仍为 1 个。 |
+| 自动触发观察 | PENDING OBSERVATION | 触发器已创建，但尚未到达并核验首次实际自动运行窗口；不得提前声称自动运行通过。 |
+| GitHub 可见性 | PRIVATE | 本阶段不得公开仓库。 |
+| 配置化重构 | NOT STARTED | 本阶段不进入配置化重构。 |
+
+停止点 4、触发器创建核验与等价人工触发验证均已完成。真实时钟事件仍为 `PENDING OBSERVATION`。Apps Script 不公开首次运行日期；从下一个 Asia/Shanghai 早间窗口开始检查，`nearMinute(30)` 的官方语义为约 07:30、前后最多 15 分钟。首次真实自动运行后仍需核对执行日志、双方向消息和开发去重行为。
