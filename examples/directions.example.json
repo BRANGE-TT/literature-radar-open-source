@@ -1,0 +1,34 @@
+[
+  {
+    "id": "causal_inference",
+    "label": "因果推断",
+    "activeSearchKeywords": [
+      "causal inference",
+      "target trial emulation",
+      "propensity score"
+    ],
+    "keywords": [
+      "causal inference",
+      "target trial",
+      "propensity score",
+      "inverse probability weighting",
+      "instrumental variable"
+    ]
+  },
+  {
+    "id": "medical_llm",
+    "label": "医学大语言模型",
+    "activeSearchKeywords": [
+      "large language model medicine",
+      "clinical large language model",
+      "medical LLM"
+    ],
+    "keywords": [
+      "large language model",
+      "medical LLM",
+      "clinical language model",
+      "generative artificial intelligence",
+      "healthcare"
+    ]
+  }
+]

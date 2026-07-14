@@ -33,7 +33,9 @@ function loadCode(options) {
     PropertiesService: {
       getScriptProperties: function() {
         return {
-          getProperty: function(name) { return propertyValues[name] || ''; },
+          getProperty: function(name) {
+            return Object.prototype.hasOwnProperty.call(propertyValues, name) ? propertyValues[name] : null;
+          },
           getProperties: function() { return Object.assign({}, propertyValues); },
           setProperty: function(name, value) { propertyValues[name] = String(value); },
           deleteProperty: function(name) { delete propertyValues[name]; }
@@ -65,9 +67,12 @@ function loadCode(options) {
           inTimezone: function(value) { spec.timezone = value; return this; },
           everyDays: function(value) { spec.everyDays = value; return this; },
           atHour: function(value) { spec.atHour = value; return this; },
-          nearMinute: function(value) { spec.nearMinute = value; return this; },
-          create: function() {
-            createdTriggerSpecs.push(Object.assign({}, spec));
+           nearMinute: function(value) { spec.nearMinute = value; return this; },
+           create: function() {
+             if (settings.triggerCreateError) {
+               throw new Error(settings.triggerCreateError);
+             }
+             createdTriggerSpecs.push(Object.assign({}, spec));
             const trigger = makeMockTrigger(spec);
             triggers.push(trigger);
             return trigger;
@@ -75,7 +80,11 @@ function loadCode(options) {
         };
       }
     },
-    UrlFetchApp: { fetch: function() { throw new Error('network disabled in tests'); } },
+    UrlFetchApp: {
+      fetch: typeof settings.urlFetch === 'function'
+        ? settings.urlFetch
+        : function() { throw new Error('network disabled in tests'); }
+    },
     GmailApp: { search: function() { return []; } }
   };
 
@@ -105,15 +114,17 @@ function loadCode(options) {
         buildOpenAlexWorksQueries_: typeof buildOpenAlexWorksQueries_ === 'function' ? buildOpenAlexWorksQueries_ : undefined,
         dedupeOpenAlexWorks_: typeof dedupeOpenAlexWorks_ === 'function' ? dedupeOpenAlexWorks_ : undefined,
         getOpenAlexRetryAfterMs_: typeof getOpenAlexRetryAfterMs_ === 'function' ? getOpenAlexRetryAfterMs_ : undefined,
-        buildOpenSourceDevMessage_: typeof buildOpenSourceDevMessage_ === 'function' ? buildOpenSourceDevMessage_ : undefined,
-        validateOpenSourceDevEnvironment_: typeof validateOpenSourceDevEnvironment_ === 'function' ? validateOpenSourceDevEnvironment_ : undefined,
-        getDevTestPushedKeys_: typeof getDevTestPushedKeys_ === 'function' ? getDevTestPushedKeys_ : undefined,
-        saveDevTestSelections_: typeof saveDevTestSelections_ === 'function' ? saveDevTestSelections_ : undefined,
-        clearDevTestDedupRecords_: typeof clearDevTestDedupRecords_ === 'function' ? clearDevTestDedupRecords_ : undefined,
-        setupOpenSourceDevTrigger_: typeof setupOpenSourceDevTrigger_ === 'function' ? setupOpenSourceDevTrigger_ : undefined,
-        listOpenSourceDevTriggers: typeof listOpenSourceDevTriggers === 'function' ? listOpenSourceDevTriggers : undefined,
-        removeOpenSourceDevTrigger_: typeof removeOpenSourceDevTrigger_ === 'function' ? removeOpenSourceDevTrigger_ : undefined,
-        OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_: typeof OPEN_SOURCE_DEV_SCRIPT_ID_SHA256 !== 'undefined' ? OPEN_SOURCE_DEV_SCRIPT_ID_SHA256 : undefined,
+        getConfiguredDirections_: typeof getConfiguredDirections_ === 'function' ? getConfiguredDirections_ : undefined,
+        parseConfiguredDirections_: typeof parseConfiguredDirections_ === 'function' ? parseConfiguredDirections_ : undefined,
+        validateLiteratureRadarConfig: typeof validateLiteratureRadarConfig === 'function' ? validateLiteratureRadarConfig : undefined,
+        sanitizeErrorForLog_: typeof sanitizeErrorForLog_ === 'function' ? sanitizeErrorForLog_ : undefined,
+        logSafeError_: typeof logSafeError_ === 'function' ? logSafeError_ : undefined,
+        fetchOpenAlexJson_: typeof fetchOpenAlexJson_ === 'function' ? fetchOpenAlexJson_ : undefined,
+        postFeishuText_: typeof postFeishuText_ === 'function' ? postFeishuText_ : undefined,
+        setupEveryTwoDaysTrigger: typeof setupEveryTwoDaysTrigger === 'function' ? setupEveryTwoDaysTrigger : undefined,
+        listLiteratureRadarTriggers: typeof listLiteratureRadarTriggers === 'function' ? listLiteratureRadarTriggers : undefined,
+        removeEveryTwoDaysTrigger: typeof removeEveryTwoDaysTrigger === 'function' ? removeEveryTwoDaysTrigger : undefined,
+        PROP_LITERATURE_DIRECTIONS_JSON_: typeof PROP_LITERATURE_DIRECTIONS_JSON !== 'undefined' ? PROP_LITERATURE_DIRECTIONS_JSON : undefined,
         CONFIG_: typeof CONFIG !== 'undefined' ? CONFIG : undefined
       };
     `,
@@ -613,96 +624,288 @@ test('parses OpenAlex retryAfter seconds for one bounded retry', function() {
   assert.strictEqual(api.getOpenAlexRetryAfterMs_('not json'), 1200);
 });
 
-test('builds a clearly labeled development full-flow message', function() {
-  const message = api.buildOpenSourceDevMessage_([
-    {
-      direction: { label: '生存分析领域' },
-      paper: Object.assign(makePaper('Development survival paper', 'Statistics in Medicine', 8, 100, 200), {
-        paperKey: 'survival-key',
-        relatedness_score_norm: 0.8,
-        venue_quality_score: 0.9,
-        citation_score: 0.7,
-        freshness_score: 1,
-        final_score: 0.84,
-        OA_Q1_PROXY: true,
-        whyRecommended: 'Development test selection.'
-      })
-    },
-    {
-      direction: { label: '医学与机器学习交叉方向' },
-      paper: Object.assign(makePaper('Development clinical AI paper', 'npj Digital Medicine', 9, 120, 300), {
-        paperKey: 'medical-ml-key',
-        relatedness_score_norm: 0.82,
-        venue_quality_score: 0.92,
-        citation_score: 0.75,
-        freshness_score: 1,
-        final_score: 0.86,
-        OA_Q1_PROXY: true,
-        whyRecommended: 'Development test selection.'
-      })
-    }
-  ], 2);
+test('uses default directions only when custom configuration is absent or blank', function() {
+  const missingApi = loadCode();
+  const blankApi = loadCode({ properties: { LITERATURE_DIRECTIONS_JSON: '   ' } });
 
-  assert.ok(message.includes('Literature Radar Open Source Dev Test'));
-  assert.ok(message.includes('这是开源开发环境的完整流程测试，不是正式推荐任务。'));
-  assert.ok(message.includes('Development survival paper'));
-  assert.ok(message.includes('Development clinical AI paper'));
-});
-
-test('requires the isolated development script fingerprint and project properties', function() {
   assert.strictEqual(
-    api.validateOpenSourceDevEnvironment_(api.OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_, 'test-api-key', 'https://example.org/dev-webhook'),
-    true
+    JSON.stringify(missingApi.getConfiguredDirections_()),
+    JSON.stringify(missingApi.CONFIG_.DIRECTIONS)
   );
-  assert.throws(function() {
-    api.validateOpenSourceDevEnvironment_('wrong-script', 'test-api-key', 'https://example.org/dev-webhook');
-  }, /Script ID/);
-  assert.throws(function() {
-    api.validateOpenSourceDevEnvironment_(api.OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_, '', 'https://example.org/dev-webhook');
-  }, /OpenAlex API Key/);
-  assert.throws(function() {
-    api.validateOpenSourceDevEnvironment_(api.OPEN_SOURCE_DEV_SCRIPT_ID_SHA256_, 'test-api-key', '');
-  }, /Webhook/);
+  assert.strictEqual(
+    JSON.stringify(blankApi.getConfiguredDirections_()),
+    JSON.stringify(blankApi.CONFIG_.DIRECTIONS)
+  );
 });
 
-test('keeps development deduplication separate from formal history', function() {
-  const isolatedApi = loadCode({
+test('loads custom directions and reuses scoring keywords for active search', function() {
+  const custom = [
+    {
+      id: 'causal_inference',
+      label: '因果推断',
+      keywords: ['causal inference', 'target trial', 'Causal Inference']
+    }
+  ];
+  const customApi = loadCode({
+    properties: { LITERATURE_DIRECTIONS_JSON: JSON.stringify(custom) }
+  });
+  const directions = customApi.getConfiguredDirections_();
+
+  assert.strictEqual(directions.length, 1);
+  assert.strictEqual(directions[0].id, 'causal_inference');
+  assert.strictEqual(JSON.stringify(directions[0].keywords), JSON.stringify(['causal inference', 'target trial']));
+  assert.strictEqual(JSON.stringify(directions[0].activeSearchKeywords), JSON.stringify(['causal inference', 'target trial']));
+
+  const query = customApi.buildOpenAlexWorksQuery_(directions[0], {
+    fromDate: '2021-01-01',
+    toDate: '2026-01-01'
+  });
+  assert(query.filter.includes('title_and_abstract.search:causal inference OR target trial'));
+
+  const selected = customApi.selectBestPaperForDirection_([
+    makePaper('A target trial emulation study', 'Example Journal', 1, 2, 3)
+  ], directions[0], [], {});
+  assert(selected);
+  assert(selected.matchedKeywords.includes('target trial'));
+});
+
+test('keeps active search and scoring keyword roles separate when both are configured', function() {
+  const customApi = loadCode({
     properties: {
-      PUSHED_PAPER_KEYS_V1: '["formal-key"]',
-      DEV_TEST_SENT_PAPER_KEYS_V1: '["old-dev-key"]'
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'precision_medicine',
+        label: '精准医学',
+        activeSearchKeywords: ['precision medicine study'],
+        keywords: ['genomic biomarker']
+      }])
+    }
+  });
+  const direction = customApi.getConfiguredDirections_()[0];
+  const query = customApi.buildOpenAlexWorksQuery_(direction, {
+    fromDate: '2021-01-01',
+    toDate: '2026-01-01'
+  });
+
+  assert(query.filter.includes('title_and_abstract.search:precision medicine study'));
+  assert(!query.filter.includes('genomic biomarker'));
+  const selected = customApi.selectBestPaperForDirection_([
+    makePaper('A genomic biomarker validation study', 'Example Journal', 1, 2, 3)
+  ], direction, [], {});
+  assert(selected);
+  assert(selected.matchedKeywords.includes('genomic biomarker'));
+});
+
+test('loads up to five independent custom directions', function() {
+  const custom = Array.from({ length: 5 }, function(_value, index) {
+    return {
+      id: 'topic_' + (index + 1),
+      label: 'Topic ' + (index + 1),
+      activeSearchKeywords: ['topic search ' + (index + 1)],
+      keywords: ['topic score ' + (index + 1)]
+    };
+  });
+  const customApi = loadCode({
+    properties: { LITERATURE_DIRECTIONS_JSON: JSON.stringify(custom) }
+  });
+
+  assert.strictEqual(customApi.getConfiguredDirections_().length, 5);
+});
+
+test('accepts documented direction field length boundaries', function() {
+  const activeSearchKeywords = ['s'.repeat(100)].concat(
+    Array.from({ length: 11 }, function(_value, index) { return 'search ' + index; })
+  );
+  const keywords = ['k'.repeat(100)].concat(
+    Array.from({ length: 49 }, function(_value, index) { return 'score ' + index; })
+  );
+  const customApi = loadCode({
+    properties: {
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'a'.repeat(32),
+        label: 'L'.repeat(60),
+        activeSearchKeywords: activeSearchKeywords,
+        keywords: keywords
+      }])
+    }
+  });
+  const direction = customApi.getConfiguredDirections_()[0];
+
+  assert.strictEqual(direction.id.length, 32);
+  assert.strictEqual(direction.label.length, 60);
+  assert.strictEqual(direction.activeSearchKeywords.length, 12);
+  assert.strictEqual(direction.keywords.length, 50);
+  assert.strictEqual(direction.activeSearchKeywords[0].length, 100);
+  assert.strictEqual(direction.keywords[0].length, 100);
+});
+
+test('accepts prototype-like ids and keywords without collection collisions', function() {
+  const customApi = loadCode({
+    properties: {
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'constructor',
+        label: 'Constructor Topic',
+        keywords: ['constructor']
+      }])
+    }
+  });
+  const direction = customApi.getConfiguredDirections_()[0];
+
+  assert.strictEqual(direction.id, 'constructor');
+  assert.strictEqual(JSON.stringify(direction.keywords), JSON.stringify(['constructor']));
+  const selected = customApi.selectBestPaperForDirection_([
+    makePaper('Constructor methods in clinical research', 'Example Journal', 1, 2, 3)
+  ], direction, [], {});
+  assert(selected);
+});
+
+test('rejects invalid custom direction configuration without fallback', function() {
+  const valid = {
+    id: 'topic',
+    label: 'Topic',
+    activeSearchKeywords: ['topic search'],
+    keywords: ['topic score']
+  };
+  const invalidValues = [
+    '{bad json',
+    JSON.stringify({ topic: valid }),
+    JSON.stringify([]),
+    JSON.stringify(Array.from({ length: 6 }, function(_value, index) {
+      return Object.assign({}, valid, { id: 'topic_' + index });
+    })),
+    JSON.stringify([valid, Object.assign({}, valid)]),
+    JSON.stringify([Object.assign({}, valid, { id: 123 })]),
+    JSON.stringify([Object.assign({}, valid, { id: 'Bad ID' })]),
+    JSON.stringify([Object.assign({}, valid, { id: 'a'.repeat(33) })]),
+    JSON.stringify([Object.assign({}, valid, { label: 123 })]),
+    JSON.stringify([Object.assign({}, valid, { label: '' })]),
+    JSON.stringify([Object.assign({}, valid, { label: 'L'.repeat(61) })]),
+    JSON.stringify([Object.assign({}, valid, { keywords: [] })]),
+    JSON.stringify([Object.assign({}, valid, { keywords: [123] })]),
+    JSON.stringify([Object.assign({}, valid, { keywords: ['k'.repeat(101)] })]),
+    JSON.stringify([Object.assign({}, valid, { activeSearchKeywords: ['heart failure, preserved ejection fraction'] })]),
+    JSON.stringify([Object.assign({}, valid, { activeSearchKeywords: ['line one\nline two'] })]),
+    JSON.stringify([Object.assign({}, valid, {
+      activeSearchKeywords: Array.from({ length: 13 }, function(_value, index) { return 'keyword ' + index; })
+    })]),
+    JSON.stringify([Object.assign({}, valid, {
+      keywords: Array.from({ length: 51 }, function(_value, index) { return 'keyword ' + index; })
+    })])
+  ];
+
+  invalidValues.forEach(function(value) {
+    const invalidApi = loadCode({ properties: { LITERATURE_DIRECTIONS_JSON: value } });
+    assert.throws(function() {
+      invalidApi.getConfiguredDirections_();
+    }, /LITERATURE_DIRECTIONS_JSON/);
+  });
+});
+
+test('prints a credential-free configuration summary', function() {
+  const customApi = loadCode({
+    properties: {
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'evidence_synthesis',
+        label: '证据综合',
+        keywords: ['systematic review']
+      }]),
+      OPENALEX_API_KEY: 'private-openalex-value',
+      FEISHU_WEBHOOK: 'https://example.test/private-webhook-value'
+    }
+  });
+  const summary = customApi.validateLiteratureRadarConfig();
+  const logged = customApi.__state.logs.join('\n');
+
+  assert.strictEqual(summary.directionCount, 1);
+  assert.strictEqual(summary.openAlexApiKeyConfigured, true);
+  assert.strictEqual(summary.feishuWebhookConfigured, true);
+  assert(!logged.includes('private-openalex-value'));
+  assert(!logged.includes('private-webhook-value'));
+});
+
+test('redacts configured credentials and credential-bearing URLs from error logs', function() {
+  const webhook = ['https://open.feishu.cn', 'open-apis/bot/v2/hook', 'raw-webhook-token'].join('/');
+  const secureApi = loadCode({
+    properties: {
+      OPENALEX_API_KEY: 'raw-api-secret',
+      FEISHU_WEBHOOK: webhook,
+      FEISHU_SIGN_SECRET: 'raw-sign-secret'
+    }
+  });
+  secureApi.logSafeError_('request failed: ', new Error(
+    'GET https://api.openalex.org/works?api_key=raw-api-secret&per-page=1 ' +
+    'POST ' + webhook + ' raw-sign-secret'
+  ));
+  const logged = secureApi.__state.logs.join('\n');
+
+  assert(logged.includes('[REDACTED]'));
+  assert(!logged.includes('raw-api-secret'));
+  assert(!logged.includes('raw-webhook-token'));
+  assert(!logged.includes('raw-sign-secret'));
+});
+
+test('redacts credentials from network exceptions before they escape', function() {
+  const apiKey = 'boundary-api-secret';
+  const webhook = ['https://open.feishu.cn', 'open-apis/bot/v2/hook', 'boundary-webhook-token'].join('/');
+  const secureApi = loadCode({
+    properties: {
+      OPENALEX_API_KEY: apiKey,
+      FEISHU_WEBHOOK: webhook
+    },
+    urlFetch: function(url) {
+      throw new Error('network failure for ' + url);
     }
   });
 
-  assert.strictEqual(JSON.stringify(isolatedApi.getDevTestPushedKeys_()), '["old-dev-key"]');
-  isolatedApi.saveDevTestSelections_(['old-dev-key'], [
-    { paper: { paperKey: 'new-dev-key' } }
-  ]);
-  assert.strictEqual(isolatedApi.__state.properties.PUSHED_PAPER_KEYS_V1, '["formal-key"]');
-  assert.strictEqual(isolatedApi.__state.properties.DEV_TEST_SENT_PAPER_KEYS_V1, '["new-dev-key","old-dev-key"]');
-
-  isolatedApi.clearDevTestDedupRecords_();
-  assert.strictEqual(isolatedApi.__state.properties.PUSHED_PAPER_KEYS_V1, '["formal-key"]');
-  assert.strictEqual(typeof isolatedApi.__state.properties.DEV_TEST_SENT_PAPER_KEYS_V1, 'undefined');
+  [
+    function() {
+      secureApi.fetchOpenAlexJson_('https://api.openalex.org/works?api_key=' + apiKey);
+    },
+    function() {
+      secureApi.postFeishuText_('test');
+    }
+  ].forEach(function(operation) {
+    assert.throws(operation, function(err) {
+      const message = String(err);
+      return !message.includes(apiKey) && !message.includes('boundary-webhook-token');
+    });
+  });
 });
 
-test('replaces and removes only the development scheduled trigger', function() {
+test('validates custom directions before replacing the production trigger', function() {
   const triggerApi = loadCode({
+    properties: { LITERATURE_DIRECTIONS_JSON: '{bad json' },
     triggers: [
       { handlerFunction: 'runEveryTwoDaysOpenAlexPush' },
-      { handlerFunction: 'runOpenSourceDevScheduledTest' },
-      { handlerFunction: 'runOpenSourceDevScheduledTest' }
+      { handlerFunction: 'anotherHandler' }
     ]
   });
 
-  const before = triggerApi.listOpenSourceDevTriggers();
-  assert.strictEqual(before.length, 3);
-  assert.strictEqual(before.filter(function(trigger) { return trigger.isDevelopmentTest; }).length, 2);
-
-  triggerApi.setupOpenSourceDevTrigger_();
+  assert.throws(function() {
+    triggerApi.setupEveryTwoDaysTrigger();
+  }, /LITERATURE_DIRECTIONS_JSON/);
+  assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 0);
+  assert.strictEqual(triggerApi.__state.createdTriggerSpecs.length, 0);
   assert.strictEqual(triggerApi.__state.triggers.length, 2);
-  assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 2);
+});
+
+test('lists replaces and removes only the production Literature Radar trigger', function() {
+  const triggerApi = loadCode({
+    properties: {
+      OPENALEX_API_KEY: 'test-openalex-key',
+      FEISHU_WEBHOOK: 'https://example.test/webhook'
+    },
+    triggers: [
+      { handlerFunction: 'runEveryTwoDaysOpenAlexPush' },
+      { handlerFunction: 'anotherHandler' }
+    ]
+  });
+
+  triggerApi.setupEveryTwoDaysTrigger();
+  const listed = triggerApi.listLiteratureRadarTriggers();
+  assert.strictEqual(listed.length, 2);
+  assert.strictEqual(listed.filter(function(trigger) { return trigger.isLiteratureRadar; }).length, 1);
   assert.deepStrictEqual(triggerApi.__state.createdTriggerSpecs[0], {
-    handlerFunction: 'runOpenSourceDevScheduledTest',
+    handlerFunction: 'runEveryTwoDaysOpenAlexPush',
     triggerSource: 'CLOCK',
     eventType: 'CLOCK',
     timezone: 'Asia/Shanghai',
@@ -711,11 +914,64 @@ test('replaces and removes only the development scheduled trigger', function() {
     nearMinute: 30
   });
 
-  const removal = triggerApi.removeOpenSourceDevTrigger_();
-  assert.strictEqual(removal.deletedCount, 1);
-  assert.strictEqual(removal.remainingCount, 0);
+  assert.strictEqual(triggerApi.removeEveryTwoDaysTrigger(), 1);
   assert.strictEqual(triggerApi.__state.triggers.length, 1);
+  assert.strictEqual(triggerApi.__state.triggers[0].getHandlerFunction(), 'anotherHandler');
+});
+
+test('keeps the previous production trigger when replacement creation fails', function() {
+  const triggerApi = loadCode({
+    properties: {
+      OPENALEX_API_KEY: 'test-openalex-key',
+      FEISHU_WEBHOOK: 'https://example.test/webhook'
+    },
+    triggers: [
+      { handlerFunction: 'runEveryTwoDaysOpenAlexPush' },
+      { handlerFunction: 'anotherHandler' }
+    ],
+    triggerCreateError: 'trigger quota exceeded'
+  });
+
+  assert.throws(function() {
+    triggerApi.setupEveryTwoDaysTrigger();
+  }, /trigger quota exceeded/);
+  assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 0);
+  assert.strictEqual(triggerApi.__state.createdTriggerSpecs.length, 0);
+  assert.strictEqual(triggerApi.__state.triggers.length, 2);
   assert.strictEqual(triggerApi.__state.triggers[0].getHandlerFunction(), 'runEveryTwoDaysOpenAlexPush');
+});
+
+test('does not create a production trigger when required credentials are missing', function() {
+  const triggerApi = loadCode({
+    triggers: [{ handlerFunction: 'runEveryTwoDaysOpenAlexPush' }]
+  });
+
+  assert.throws(function() {
+    triggerApi.setupEveryTwoDaysTrigger();
+  }, /OpenAlex API Key/);
+  assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 0);
+  assert.strictEqual(triggerApi.__state.createdTriggerSpecs.length, 0);
+  assert.strictEqual(triggerApi.__state.triggers.length, 1);
+});
+
+test('rejects blank credentials and invalid Webhooks without replacing triggers', function() {
+  [
+    { OPENALEX_API_KEY: '   ', FEISHU_WEBHOOK: 'https://example.test/webhook' },
+    { OPENALEX_API_KEY: 'test-openalex-key', FEISHU_WEBHOOK: '   ' },
+    { OPENALEX_API_KEY: 'test-openalex-key', FEISHU_WEBHOOK: 'not-a-webhook-url' }
+  ].forEach(function(properties) {
+    const triggerApi = loadCode({
+      properties: properties,
+      triggers: [{ handlerFunction: 'runEveryTwoDaysOpenAlexPush' }]
+    });
+
+    assert.throws(function() {
+      triggerApi.setupEveryTwoDaysTrigger();
+    }, /OpenAlex API Key|Webhook/);
+    assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 0);
+    assert.strictEqual(triggerApi.__state.createdTriggerSpecs.length, 0);
+    assert.strictEqual(triggerApi.__state.triggers.length, 1);
+  });
 });
 
 function mockOpenAlexWork() {

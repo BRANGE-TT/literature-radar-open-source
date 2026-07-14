@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`Code.gs` contains the Google Apps Script application: OpenAlex retrieval and scoring, optional Gmail Scholar Alert parsing, Feishu delivery, trigger setup, and test helpers. `appsscript.json` defines the V8 runtime, timezone, and OAuth scopes. Local regression tests live in `tests/openalex_quality.test.js`; they load `Code.gs` into a mocked Apps Script environment. Design decisions belong in `docs/`. Keep generated output and dependencies out of Git (`node_modules/`, `dist/`, `build/`, and `.playwright-mcp/` are ignored).
+`Code.gs` contains OpenAlex retrieval, scoring, Feishu delivery, triggers, and test helpers. `appsscript.json` defines the V8 runtime and OAuth scopes. Tests live in `tests/openalex_quality.test.js`; configuration samples live in `examples/`, design notes in `docs/`, and CI in `.github/workflows/`. Keep generated output and dependencies out of Git.
 
 ## Build, Test, and Development Commands
 

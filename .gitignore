@@ -1,5 +1,6 @@
 # Local Apps Script binding and credentials
 .clasp.json
+.clasprc.json
 .env
 .env.*
 credentials.json
@@ -14,6 +15,7 @@ build/
 tmp/
 temp/
 .playwright-mcp/
+.playwright-cli/
 
 # Operating system and editor files
 .DS_Store
