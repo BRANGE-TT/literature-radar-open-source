@@ -9,7 +9,7 @@ Use this checklist before changing the GitHub repository from Private to Public.
 - [x] Default directions remain backward compatible.
 - [x] Offline tests, Apps Script syntax, manifest, and example JSON pass.
 - [x] `.clasp.json`, `.clasprc.json`, credentials, tokens, and logs are ignored.
-- [ ] GitHub Actions passes on the public-ready commit.
+- [x] GitHub Actions passes on the public-ready commit.
 - [x] README includes a fresh-install path and user configuration schema.
 - [x] Security and contribution policies are present.
 - [x] GitHub description and topics identify the project.
