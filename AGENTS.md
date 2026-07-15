@@ -8,7 +8,7 @@
 
 - `node tests/openalex_quality.test.js` runs the offline regression suite. Network access is deliberately disabled in its sandbox.
 - `Get-Content -Raw -Encoding UTF8 Code.gs | node --check -` checks JavaScript syntax without executing Apps Script APIs.
-- `node -e "JSON.parse(require('fs').readFileSync('appsscript.json','utf8')); console.log('manifest ok')"` validates the manifest.
+- `node -e "const fs=require('fs'); ['appsscript.json','examples/directions.example.json','examples/config-v2.example.json'].forEach(f=>JSON.parse(fs.readFileSync(f,'utf8'))); console.log('json ok')"` validates the manifest and configuration examples.
 - `npx @google/clasp push` syncs only `Code.gs` and `appsscript.json` to your separate Apps Script project.
 
 There is no local server or build bundle. In Apps Script, run `testEveryTwoDaysDryRun()` before any live Feishu push or trigger change.

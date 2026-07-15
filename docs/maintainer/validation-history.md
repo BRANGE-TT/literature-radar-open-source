@@ -2,6 +2,14 @@
 
 This file records only reusable, non-secret validation evidence. It intentionally omits local paths, Script IDs, Webhooks, API keys, OAuth data, and personal project details.
 
+## 2026-07-15 Config v2 Live Validation
+
+- Synced the config v2 implementation to the isolated Apps Script development project and verified the editor content matched the local `Code.gs`.
+- A one-time wrapper temporarily installed a non-secret v2 configuration with one causal-inference direction, English language, a four-year lookback, and an exclusion phrase.
+- `validateLiteratureRadarConfig()` reported `schemaVersion: 2` and `configSource: v2`; `testEveryTwoDaysDryRun()` parsed 73 candidates and selected a relevant target-trial framework paper.
+- A `finally` block restored the original property, reported the restoration as successful, and a subsequent validation confirmed the original default two-direction configuration.
+- The wrapper was removed and the remote editor was checked against the local file again. No Feishu message was sent, no formal pushed-paper history was written, and no trigger was created or changed.
+
 ## 2026-07-15 Top-Level Search Live Validation
 
 - Synced the current `Code.gs` to the isolated Apps Script development project and verified the reloaded editor content matched the local file after line-ending normalization.

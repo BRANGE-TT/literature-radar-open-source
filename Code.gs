@@ -3,7 +3,7 @@
  *
  * 使用方式：
  * 1. 把本文件内容粘贴到 Google Apps Script 的 Code.gs。
- * 2. 在脚本属性中设置 FEISHU_WEBHOOK、OPENALEX_API_KEY 和可选的 LITERATURE_DIRECTIONS_JSON。
+ * 2. 在脚本属性中设置 FEISHU_WEBHOOK、OPENALEX_API_KEY 和可选的 LITERATURE_RADAR_CONFIG_JSON。
  * 3. 运行 validateLiteratureRadarConfig() 检查配置摘要。
  * 4. 运行 testEveryTwoDaysDryRun() 检查真实筛选结果。
  * 5. 确认后运行 runEveryTwoDaysOpenAlexPush() 完成首次推送。
@@ -160,6 +160,7 @@ const PROP_PUSHED_KEYS = 'PUSHED_PAPER_KEYS_V1';
 const PROP_FEISHU_WEBHOOK = 'FEISHU_WEBHOOK';
 const PROP_FEISHU_SIGN_SECRET = 'FEISHU_SIGN_SECRET';
 const PROP_OPENALEX_API_KEY = 'OPENALEX_API_KEY';
+const PROP_LITERATURE_RADAR_CONFIG_JSON = 'LITERATURE_RADAR_CONFIG_JSON';
 const PROP_LITERATURE_DIRECTIONS_JSON = 'LITERATURE_DIRECTIONS_JSON';
 const OPENALEX_WORK_CACHE_PREFIX = 'OPENALEX_WORK_CACHE_V1_';
 const OPENALEX_SOURCE_CACHE_PREFIX = 'OPENALEX_SOURCE_CACHE_V1_';
@@ -170,6 +171,11 @@ const MAX_DIRECTION_LABEL_LENGTH = 60;
 const MAX_ACTIVE_SEARCH_KEYWORDS = 12;
 const MAX_SCORING_KEYWORDS = 50;
 const MAX_KEYWORD_LENGTH = 100;
+const DEFAULT_LITERATURE_LANGUAGE = 'en';
+const DEFAULT_LITERATURE_YEARS_BACK = 5;
+const MAX_LITERATURE_YEARS_BACK = 20;
+const MAX_EXCLUDE_KEYWORDS = 50;
+const MAX_OPENALEX_TOPIC_IDS = 20;
 
 const HIGH_QUALITY_SOURCE_WHITE_LIST = {
   statistics: [
@@ -256,7 +262,7 @@ function runDailyScholarPush() {
 
 /**
  * 每两日 OpenAlex 主动检索入口函数。
- * 该函数是当前推荐主流程：主动检索近五年英文文献，而不是依赖 Gmail Scholar Alert。
+ * 该函数是当前推荐主流程：按配置主动检索文献，而不是依赖 Gmail Scholar Alert。
  */
 function runEveryTwoDaysOpenAlexPush() {
   const lock = LockService.getScriptLock();
@@ -268,6 +274,7 @@ function runEveryTwoDaysOpenAlexPush() {
   try {
     const runtimeConfig = assertLiteratureRadarRuntimeConfig_();
     const apiKey = runtimeConfig.apiKey;
+    const dateRange = getDateRange_(runtimeConfig.yearsBack);
 
     pruneOpenAlexCaches_();
     const directions = runtimeConfig.directions;
@@ -277,9 +284,18 @@ function runEveryTwoDaysOpenAlexPush() {
     let parsedCount = 0;
 
     directions.forEach(function(direction) {
-      const candidates = searchOpenAlexWorksByDirection_(direction, apiKey, pushedKeys);
+      const candidates = searchOpenAlexWorksByDirection_(direction, apiKey, pushedKeys, {
+        language: runtimeConfig.language,
+        dateRange: dateRange
+      });
       parsedCount += candidates.length;
-      const selected = selectBestPaperForDirection_(candidates, direction, pushedKeys, reservedKeys);
+      const selected = selectBestPaperForDirection_(
+        candidates,
+        direction,
+        pushedKeys,
+        reservedKeys,
+        dateRange
+      );
       if (selected && selected.paperKey) {
         reservedKeys[selected.paperKey] = true;
       }
@@ -289,11 +305,11 @@ function runEveryTwoDaysOpenAlexPush() {
       });
     });
 
-    const message = buildFeishuMessage_(selections, parsedCount, {
-      title: 'OpenAlex 近五年英文文献推荐',
-      sourceDescription: 'OpenAlex active search over the last five years.',
-      noResultReason: '可能原因：OpenAlex 近五年英文候选不足、关键词匹配不足，或候选论文已经推送过。'
-    });
+    const message = buildFeishuMessage_(
+      selections,
+      parsedCount,
+      buildActiveSearchMessageOptions_(runtimeConfig)
+    );
     postFeishuText_(message);
     savePushedSelectionsSafely_(pushedKeys, selections);
   } catch (err) {
@@ -558,17 +574,28 @@ function testFiveYearDateRange() {
  * 测试：每两日主动检索 dry run，不推送飞书、不写入去重记录。
  */
 function testEveryTwoDaysDryRun() {
-  const directions = getConfiguredDirections_();
+  const runtimeConfig = getLiteratureRadarConfig_();
+  const directions = runtimeConfig.directions;
+  const dateRange = getDateRange_(runtimeConfig.yearsBack);
   const pushedKeys = getPushedKeys_();
   const reservedKeys = {};
   const selections = [];
   let parsedCount = 0;
 
   directions.forEach(function(direction) {
-    const candidates = searchOpenAlexWorksByDirection_(direction, null, pushedKeys);
+    const candidates = searchOpenAlexWorksByDirection_(direction, null, pushedKeys, {
+      language: runtimeConfig.language,
+      dateRange: dateRange
+    });
     Logger.log(direction.label + '候选数：' + candidates.length);
     parsedCount += candidates.length;
-    const selected = selectBestPaperForDirection_(candidates, direction, pushedKeys, reservedKeys);
+    const selected = selectBestPaperForDirection_(
+      candidates,
+      direction,
+      pushedKeys,
+      reservedKeys,
+      dateRange
+    );
     if (selected && selected.paperKey) {
       reservedKeys[selected.paperKey] = true;
     }
@@ -578,11 +605,27 @@ function testEveryTwoDaysDryRun() {
     });
   });
 
-  Logger.log(buildFeishuMessage_(selections, parsedCount, {
-    title: 'OpenAlex 近五年英文文献推荐',
-    sourceDescription: 'OpenAlex active search over the last five years.',
-    noResultReason: '可能原因：OpenAlex 近五年英文候选不足、关键词匹配不足，或候选论文已经推送过。'
-  }));
+  Logger.log(buildFeishuMessage_(
+    selections,
+    parsedCount,
+    buildActiveSearchMessageOptions_(runtimeConfig)
+  ));
+}
+
+function buildActiveSearchMessageOptions_(runtimeConfig) {
+  if (runtimeConfig.language === 'en' && runtimeConfig.yearsBack === 5) {
+    return {
+      title: 'OpenAlex 近五年英文文献推荐',
+      sourceDescription: 'OpenAlex active search over the last five years.',
+      noResultReason: '可能原因：OpenAlex 近五年英文候选不足、关键词匹配不足，或候选论文已经推送过。'
+    };
+  }
+  return {
+    title: 'OpenAlex 文献推荐（语言：' + runtimeConfig.language + '，近 ' + runtimeConfig.yearsBack + ' 年）',
+    sourceDescription: 'OpenAlex active search; language=' + runtimeConfig.language +
+      '; lookback=' + runtimeConfig.yearsBack + ' years.',
+    noResultReason: '可能原因：指定语言或时间范围内候选不足、关键词匹配不足，或候选论文已经推送过。'
+  };
 }
 
 /**
@@ -630,22 +673,26 @@ function testEveryTwoDaysFeishuPush() {
 /**
  * 按方向主动检索 OpenAlex works。
  */
-function searchOpenAlexWorksByDirection(directionConfig, apiKey, pushedKeys) {
-  return searchOpenAlexWorksByDirection_(directionConfig, apiKey, pushedKeys);
+function searchOpenAlexWorksByDirection(directionConfig, apiKey, pushedKeys, options) {
+  return searchOpenAlexWorksByDirection_(directionConfig, apiKey, pushedKeys, options);
 }
 
 /**
  * 按方向主动检索 OpenAlex works。
  */
-function searchOpenAlexWorksByDirection_(directionConfig, apiKey, pushedKeys) {
+function searchOpenAlexWorksByDirection_(directionConfig, apiKey, pushedKeys, options) {
   const resolvedApiKey = apiKey || getConfiguredValue_(PROP_OPENALEX_API_KEY, '');
   if (!resolvedApiKey) {
     Logger.log('未配置 OpenAlex API Key，停止 OpenAlex 主动检索流程。');
     return [];
   }
 
-  const range = getFiveYearDateRange_();
-  const queryParamsList = buildOpenAlexWorksQueries_(directionConfig, range);
+  const searchOptions = options || {};
+  const range = searchOptions.dateRange || getFiveYearDateRange_();
+  const language = searchOptions.language || DEFAULT_LITERATURE_LANGUAGE;
+  const queryParamsList = buildOpenAlexWorksQueries_(directionConfig, range, {
+    language: language
+  });
   let works = [];
   queryParamsList.forEach(function(queryParams) {
     queryParams.api_key = resolvedApiKey;
@@ -658,8 +705,14 @@ function searchOpenAlexWorksByDirection_(directionConfig, apiKey, pushedKeys) {
       return normalizeOpenAlexWorkToPaper_(work);
     })
     .filter(function(paper) {
-      return isValidActiveSearchPaper_(paper, range, pushed);
+      return isValidActiveSearchPaper_(paper, range, pushed, language);
+    })
+    .filter(function(paper) {
+      return !matchesDirectionExclusion_(paper, directionConfig);
     });
+  papers.forEach(function(paper) {
+    delete paper._fullAbstract;
+  });
 
   enrichActiveSearchSourceMetrics_(papers, directionConfig, resolvedApiKey);
   computeCitationScores_(papers);
@@ -733,21 +786,21 @@ function enrichActiveSearchSourceMetrics_(papers, directionConfig, apiKey, fetch
 /**
  * 公开测试入口：构造 OpenAlex Works 查询参数。
  */
-function buildOpenAlexWorksQuery(directionConfig, dateRange) {
-  return buildOpenAlexWorksQuery_(directionConfig, dateRange);
+function buildOpenAlexWorksQuery(directionConfig, dateRange, options) {
+  return buildOpenAlexWorksQuery_(directionConfig, dateRange, options);
 }
 
 /**
  * 公开测试入口：按布尔操作符限制构造多个 OpenAlex Works 查询。
  */
-function buildOpenAlexWorksQueries(directionConfig, dateRange) {
-  return buildOpenAlexWorksQueries_(directionConfig, dateRange);
+function buildOpenAlexWorksQueries(directionConfig, dateRange, options) {
+  return buildOpenAlexWorksQueries_(directionConfig, dateRange, options);
 }
 
 /**
  * 将方向关键词拆成多个查询，并在分块之间平均分配候选配额。
  */
-function buildOpenAlexWorksQueries_(directionConfig, dateRange) {
+function buildOpenAlexWorksQueries_(directionConfig, dateRange, options) {
   const keywords = directionConfig.activeSearchKeywords || directionConfig.keywords || [];
   if (!keywords.length) {
     return [];
@@ -763,8 +816,9 @@ function buildOpenAlexWorksQueries_(directionConfig, dateRange) {
   const remainder = CONFIG.OPENALEX.ACTIVE_SEARCH_PER_PAGE % chunks.length;
   return chunks.map(function(chunk, index) {
     const query = buildOpenAlexWorksQuery_({
-      activeSearchKeywords: chunk
-    }, dateRange);
+      activeSearchKeywords: chunk,
+      openAlexTopicIds: directionConfig.openAlexTopicIds || []
+    }, dateRange, options);
     query.per_page = baseSize + (index < remainder ? 1 : 0);
     return query;
   });
@@ -773,16 +827,22 @@ function buildOpenAlexWorksQueries_(directionConfig, dateRange) {
 /**
  * 构造 OpenAlex Works 查询参数。
  */
-function buildOpenAlexWorksQuery_(directionConfig, dateRange) {
+function buildOpenAlexWorksQuery_(directionConfig, dateRange, options) {
   const keywords = directionConfig.activeSearchKeywords || directionConfig.keywords || [];
   const range = dateRange || getFiveYearDateRange_();
+  const queryOptions = options || {};
+  const filters = [
+    'from_publication_date:' + range.fromDate,
+    'to_publication_date:' + range.toDate,
+    'language:' + (queryOptions.language || DEFAULT_LITERATURE_LANGUAGE),
+    'is_retracted:false'
+  ];
+  const topicIds = directionConfig.openAlexTopicIds || [];
+  if (topicIds.length) {
+    filters.push('topics.id:' + topicIds.join('|'));
+  }
   return {
-    filter: [
-      'from_publication_date:' + range.fromDate,
-      'to_publication_date:' + range.toDate,
-      'language:en',
-      'is_retracted:false'
-    ].join(','),
+    filter: filters.join(','),
     search: keywords.join(' OR '),
     sort: 'relevance_score:desc,cited_by_count:desc',
     select: [
@@ -885,6 +945,7 @@ function normalizeOpenAlexWorkToPaper_(work) {
     link: link,
     doi: doi,
     snippet: limitText_(abstractText, CONFIG.MAX_SNIPPET_LENGTH),
+    _fullAbstract: abstractText,
     publicationDate: work && work.publication_date ? work.publication_date : '',
     publicationYear: work && work.publication_year ? work.publication_year : null,
     emailDate: parseDateForScoring_(work && work.publication_date, work && work.publication_year),
@@ -934,16 +995,23 @@ function reconstructAbstract_(abstractInvertedIndex) {
 }
 
 /**
- * 计算近五年日期范围。
+ * 计算指定回溯年数的日期范围。
  */
-function getFiveYearDateRange_(now) {
+function getDateRange_(yearsBack, now) {
   const to = now ? new Date(now.getTime()) : new Date();
   const from = new Date(to.getTime());
-  from.setFullYear(from.getFullYear() - 5);
+  from.setFullYear(from.getFullYear() - yearsBack);
   return {
     fromDate: formatIsoDate_(from),
     toDate: formatIsoDate_(to)
   };
+}
+
+/**
+ * 兼容旧测试与调用：默认计算近五年日期范围。
+ */
+function getFiveYearDateRange_(now) {
+  return getDateRange_(DEFAULT_LITERATURE_YEARS_BACK, now);
 }
 
 /**
@@ -987,14 +1055,14 @@ function getOpenAlexLandingPageUrl_(work, doi) {
 /**
  * 判断 OpenAlex 主动检索候选是否可进入评分。
  */
-function isValidActiveSearchPaper_(paper, dateRange, pushedKeys) {
+function isValidActiveSearchPaper_(paper, dateRange, pushedKeys, language) {
   if (!paper || !paper.title) {
     return false;
   }
   if (pushedKeys && pushedKeys.indexOf(makePaperKey_(paper)) !== -1) {
     return false;
   }
-  if (paper.language && paper.language !== 'en') {
+  if (paper.language && paper.language !== (language || DEFAULT_LITERATURE_LANGUAGE)) {
     return false;
   }
   if (paper.workType && !isAcademicWorkType_(paper.workType)) {
@@ -1004,6 +1072,48 @@ function isValidActiveSearchPaper_(paper, dateRange, pushedKeys) {
     return false;
   }
   return true;
+}
+
+function matchesDirectionExclusion_(paper, direction) {
+  const excludeKeywords = direction && direction.excludeKeywords || [];
+  if (!excludeKeywords.length) {
+    return false;
+  }
+  const searchableText = [
+    paper && paper.title,
+    paper && (paper._fullAbstract || paper.snippet),
+    paper && paper.source
+  ]
+    .map(function(value) { return normalizeForMatch_(value); })
+    .join(' ');
+  return excludeKeywords.some(function(keyword) {
+    return containsExclusionKeyword_(searchableText, normalizeForMatch_(keyword));
+  });
+}
+
+function containsExclusionKeyword_(searchableText, keyword) {
+  if (!keyword) {
+    return false;
+  }
+  if (/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(keyword)) {
+    return searchableText.indexOf(keyword) !== -1;
+  }
+
+  let startIndex = 0;
+  while (startIndex <= searchableText.length - keyword.length) {
+    const matchIndex = searchableText.indexOf(keyword, startIndex);
+    if (matchIndex === -1) {
+      return false;
+    }
+    const before = matchIndex > 0 ? searchableText.charAt(matchIndex - 1) : '';
+    const afterIndex = matchIndex + keyword.length;
+    const after = afterIndex < searchableText.length ? searchableText.charAt(afterIndex) : '';
+    if (!/[a-z0-9]/i.test(before) && !/[a-z0-9]/i.test(after)) {
+      return true;
+    }
+    startIndex = matchIndex + 1;
+  }
+  return false;
 }
 
 /**
@@ -1816,12 +1926,15 @@ function parsePlainTextPapers_(plain, message) {
 /**
  * 针对某个研究方向选择匹配度最高且未推送过的一篇论文。
  */
-function selectBestPaperForDirection_(papers, direction, pushedKeys, reservedKeys) {
+function selectBestPaperForDirection_(papers, direction, pushedKeys, reservedKeys, dateRange) {
   const scored = [];
 
   papers.forEach(function(paper) {
     const paperKey = makePaperKey_(paper);
     if (!paperKey || pushedKeys.indexOf(paperKey) !== -1 || reservedKeys[paperKey]) {
+      return;
+    }
+    if (matchesDirectionExclusion_(paper, direction)) {
       return;
     }
 
@@ -1856,7 +1969,7 @@ function selectBestPaperForDirection_(papers, direction, pushedKeys, reservedKey
 
   computeCitationScores_(scored);
   applyVenueQualityScores_(scored, direction);
-  applyFinalScores_(scored);
+  applyFinalScores_(scored, dateRange);
   scored.forEach(function(paper) {
     paper.whyRecommended = buildReason_(paper.matchedKeywords, paper.score, paper);
   });
@@ -2054,11 +2167,11 @@ function markOAQ1Proxy(papers, direction) {
 /**
  * 计算最终综合分。
  */
-function applyFinalScores_(papers) {
+function applyFinalScores_(papers, dateRange) {
   const maxRelatedness = Math.max.apply(null, papers.map(function(paper) {
     return paper.relatedness_score || paper.score || 0;
   }).concat([0]));
-  const activeSearchRange = getFiveYearDateRange_();
+  const activeSearchRange = dateRange || getFiveYearDateRange_();
   const dateValues = papers.map(function(paper) {
     return safeDateValue_(paper.emailDate);
   }).filter(function(value) {
@@ -2541,102 +2654,221 @@ function logSafeError_(prefix, err) {
 }
 
 /**
- * 读取用户自定义研究方向。属性缺失或为空时保留内置默认方向。
+ * 读取统一运行配置。v2 优先；否则兼容旧方向数组或内置默认方向。
  */
-function getConfiguredDirections_() {
-  const raw = PropertiesService.getScriptProperties().getProperty(PROP_LITERATURE_DIRECTIONS_JSON);
-  return parseConfiguredDirections_(raw, CONFIG.DIRECTIONS);
+function getLiteratureRadarConfig_() {
+  const properties = PropertiesService.getScriptProperties();
+  const rawV2 = properties.getProperty(PROP_LITERATURE_RADAR_CONFIG_JSON);
+  if (rawV2 !== null && typeof rawV2 !== 'undefined' && String(rawV2).trim() !== '') {
+    return parseLiteratureRadarConfig_(rawV2);
+  }
+
+  const rawLegacy = properties.getProperty(PROP_LITERATURE_DIRECTIONS_JSON);
+  const hasLegacy = rawLegacy !== null &&
+    typeof rawLegacy !== 'undefined' &&
+    String(rawLegacy).trim() !== '';
+  return {
+    schemaVersion: 1,
+    source: hasLegacy ? 'legacy' : 'default',
+    language: DEFAULT_LITERATURE_LANGUAGE,
+    yearsBack: DEFAULT_LITERATURE_YEARS_BACK,
+    directions: parseConfiguredDirections_(rawLegacy, CONFIG.DIRECTIONS)
+  };
 }
 
 /**
- * 解析并校验研究方向 JSON。显式配置无效时直接报错，避免推送错误主题。
+ * 解析严格的版本化配置。显式 v2 无效时直接报错，不回退到旧配置。
+ */
+function parseLiteratureRadarConfig_(raw) {
+  const propertyName = PROP_LITERATURE_RADAR_CONFIG_JSON;
+  let parsed;
+  try {
+    parsed = JSON.parse(String(raw).trim());
+  } catch (err) {
+    throw new Error(propertyName + ' 不是有效 JSON。');
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(propertyName + ' 必须是对象。');
+  }
+  assertAllowedConfigKeys_(
+    parsed,
+    ['schemaVersion', 'language', 'yearsBack', 'directions'],
+    propertyName,
+    '顶层'
+  );
+  if (parsed.schemaVersion !== 2) {
+    throw new Error(propertyName + ' 的 schemaVersion 必须为 2。');
+  }
+
+  if (typeof parsed.language !== 'undefined' && typeof parsed.language !== 'string') {
+    throw new Error(propertyName + ' 的 language 必须是字符串。');
+  }
+  const language = typeof parsed.language === 'undefined'
+    ? DEFAULT_LITERATURE_LANGUAGE
+    : parsed.language.trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(language)) {
+    throw new Error(propertyName + ' 的 language 必须是两位 OpenAlex 语言代码。');
+  }
+
+  const yearsBack = typeof parsed.yearsBack === 'undefined'
+    ? DEFAULT_LITERATURE_YEARS_BACK
+    : parsed.yearsBack;
+  if (!Number.isInteger(yearsBack) || yearsBack < 1 || yearsBack > MAX_LITERATURE_YEARS_BACK) {
+    throw new Error(propertyName + ' 的 yearsBack 必须是 1-' + MAX_LITERATURE_YEARS_BACK + ' 的整数。');
+  }
+
+  return {
+    schemaVersion: 2,
+    source: 'v2',
+    language: language,
+    yearsBack: yearsBack,
+    directions: normalizeConfiguredDirections_(parsed.directions, propertyName, true)
+  };
+}
+
+/**
+ * 读取用户自定义研究方向。兼容入口返回统一配置中的方向数组。
+ */
+function getConfiguredDirections_() {
+  return getLiteratureRadarConfig_().directions;
+}
+
+/**
+ * 解析并校验旧版方向 JSON。属性缺失或为空时保留内置默认方向。
  */
 function parseConfiguredDirections_(raw, defaultDirections) {
   if (raw === null || typeof raw === 'undefined' || String(raw).trim() === '') {
     return defaultDirections;
   }
 
-  const text = String(raw).trim();
   let parsed;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(String(raw).trim());
   } catch (err) {
     throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 不是有效 JSON。');
   }
+  return normalizeConfiguredDirections_(parsed, PROP_LITERATURE_DIRECTIONS_JSON, false);
+}
 
+function normalizeConfiguredDirections_(parsed, propertyName, strictV2) {
   if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > MAX_CUSTOM_DIRECTIONS) {
-    throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 必须是包含 1-' + MAX_CUSTOM_DIRECTIONS + ' 个方向的数组。');
+    throw new Error(propertyName + ' 必须是包含 1-' + MAX_CUSTOM_DIRECTIONS + ' 个方向的数组。');
   }
 
   const seenIds = Object.create(null);
   return parsed.map(function(direction, index) {
     if (!direction || typeof direction !== 'object' || Array.isArray(direction)) {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 第 ' + (index + 1) + ' 个方向必须是对象。');
+      throw new Error(propertyName + ' 第 ' + (index + 1) + ' 个方向必须是对象。');
+    }
+    if (strictV2) {
+      assertAllowedConfigKeys_(
+        direction,
+        ['id', 'label', 'activeSearchKeywords', 'keywords', 'excludeKeywords', 'openAlexTopicIds'],
+        propertyName,
+        '第 ' + (index + 1) + ' 个方向'
+      );
     }
 
     if (typeof direction.id !== 'string') {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 第 ' + (index + 1) + ' 个方向的 id 必须是字符串。');
+      throw new Error(propertyName + ' 第 ' + (index + 1) + ' 个方向的 id 必须是字符串。');
     }
     const id = direction.id.trim();
     if (!id || id.length > MAX_DIRECTION_ID_LENGTH || !/^[a-z0-9][a-z0-9_-]*$/.test(id)) {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 第 ' + (index + 1) + ' 个方向的 id 无效。');
+      throw new Error(propertyName + ' 第 ' + (index + 1) + ' 个方向的 id 无效。');
     }
     if (seenIds[id]) {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 包含重复 id：' + id + '。');
+      throw new Error(propertyName + ' 包含重复 id：' + id + '。');
     }
     seenIds[id] = true;
 
     if (typeof direction.label !== 'string') {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 方向 ' + id + ' 的 label 必须是字符串。');
+      throw new Error(propertyName + ' 方向 ' + id + ' 的 label 必须是字符串。');
     }
     const label = direction.label.trim();
     if (!label || label.length > MAX_DIRECTION_LABEL_LENGTH) {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 方向 ' + id + ' 的 label 必须为 1-' + MAX_DIRECTION_LABEL_LENGTH + ' 个字符。');
+      throw new Error(propertyName + ' 方向 ' + id + ' 的 label 必须为 1-' + MAX_DIRECTION_LABEL_LENGTH + ' 个字符。');
+    }
+    if (strictV2 && /[\u0000-\u001f\u007f]/.test(label)) {
+      throw new Error(propertyName + ' 方向 ' + id + ' 的 label 不能包含控制字符。');
     }
 
     const keywords = normalizeDirectionKeywords_(
       direction.keywords,
       id + '.keywords',
-      MAX_SCORING_KEYWORDS
+      MAX_SCORING_KEYWORDS,
+      propertyName
     );
+    if (strictV2) {
+      keywords.forEach(function(keyword) {
+        if (/[\u0000-\u001f\u007f]/.test(keyword)) {
+          throw new Error(propertyName + ' 中 ' + id + '.keywords 不能包含控制字符。');
+        }
+      });
+    }
     const activeSearchKeywords = typeof direction.activeSearchKeywords === 'undefined'
       ? keywords.slice(0, MAX_ACTIVE_SEARCH_KEYWORDS)
       : normalizeDirectionKeywords_(
         direction.activeSearchKeywords,
         id + '.activeSearchKeywords',
-        MAX_ACTIVE_SEARCH_KEYWORDS
+        MAX_ACTIVE_SEARCH_KEYWORDS,
+        propertyName
       );
     activeSearchKeywords.forEach(function(keyword) {
       if (/[,\u0000-\u001f\u007f]/.test(keyword)) {
-        throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 中 ' + id + '.activeSearchKeywords 不能包含逗号或控制字符。');
+        throw new Error(propertyName + ' 中 ' + id + '.activeSearchKeywords 不能包含逗号或控制字符。');
       }
     });
-    return {
+
+    const normalized = {
       id: id,
       label: label,
       activeSearchKeywords: activeSearchKeywords,
       keywords: keywords
     };
+    if (strictV2) {
+      normalized.excludeKeywords = normalizeOptionalDirectionKeywords_(
+        direction.excludeKeywords,
+        id + '.excludeKeywords',
+        MAX_EXCLUDE_KEYWORDS,
+        propertyName
+      );
+      normalized.openAlexTopicIds = normalizeOpenAlexTopicIds_(
+        direction.openAlexTopicIds,
+        id + '.openAlexTopicIds',
+        propertyName
+      );
+    }
+    return normalized;
+  });
+}
+
+function assertAllowedConfigKeys_(value, allowedKeys, propertyName, context) {
+  Object.keys(value).forEach(function(key) {
+    if (allowedKeys.indexOf(key) === -1) {
+      throw new Error(propertyName + ' 中' + context + '包含不支持的字段：' + key + '。');
+    }
   });
 }
 
 /**
  * 校验、去空白并按大小写不敏感方式去重关键词。
  */
-function normalizeDirectionKeywords_(value, fieldName, maxItems) {
+function normalizeDirectionKeywords_(value, fieldName, maxItems, propertyName) {
+  const sourceProperty = propertyName || PROP_LITERATURE_DIRECTIONS_JSON;
   if (!Array.isArray(value) || value.length < 1 || value.length > maxItems) {
-    throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 中 ' + fieldName + ' 必须包含 1-' + maxItems + ' 个关键词。');
+    throw new Error(sourceProperty + ' 中 ' + fieldName + ' 必须包含 1-' + maxItems + ' 个关键词。');
   }
 
   const seen = Object.create(null);
   const normalized = [];
   value.forEach(function(item) {
     if (typeof item !== 'string') {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 中 ' + fieldName + ' 只能包含字符串。');
+      throw new Error(sourceProperty + ' 中 ' + fieldName + ' 只能包含字符串。');
     }
     const keyword = item.trim();
     if (!keyword || keyword.length > MAX_KEYWORD_LENGTH) {
-      throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 中 ' + fieldName + ' 的关键词长度必须为 1-' + MAX_KEYWORD_LENGTH + '。');
+      throw new Error(sourceProperty + ' 中 ' + fieldName + ' 的关键词长度必须为 1-' + MAX_KEYWORD_LENGTH + '。');
     }
     const key = keyword.toLowerCase();
     if (!seen[key]) {
@@ -2646,16 +2878,69 @@ function normalizeDirectionKeywords_(value, fieldName, maxItems) {
   });
 
   if (!normalized.length) {
-    throw new Error(PROP_LITERATURE_DIRECTIONS_JSON + ' 中 ' + fieldName + ' 不能为空。');
+    throw new Error(sourceProperty + ' 中 ' + fieldName + ' 不能为空。');
   }
   return normalized;
+}
+
+function normalizeOptionalDirectionKeywords_(value, fieldName, maxItems, propertyName) {
+  if (typeof value === 'undefined') {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > maxItems) {
+    throw new Error(propertyName + ' 中 ' + fieldName + ' 必须包含 0-' + maxItems + ' 个关键词。');
+  }
+
+  const seen = Object.create(null);
+  const normalized = [];
+  value.forEach(function(item) {
+    if (typeof item !== 'string') {
+      throw new Error(propertyName + ' 中 ' + fieldName + ' 只能包含字符串。');
+    }
+    const keyword = item.trim();
+    if (!keyword || keyword.length > MAX_KEYWORD_LENGTH || /[\u0000-\u001f\u007f]/.test(keyword)) {
+      throw new Error(propertyName + ' 中 ' + fieldName + ' 的关键词无效。');
+    }
+    const key = keyword.toLowerCase();
+    if (!seen[key]) {
+      seen[key] = true;
+      normalized.push(keyword);
+    }
+  });
+  return normalized;
+}
+
+function normalizeOpenAlexTopicIds_(value, fieldName, propertyName) {
+  if (typeof value === 'undefined') {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > MAX_OPENALEX_TOPIC_IDS) {
+    throw new Error(propertyName + ' 中 ' + fieldName + ' 必须包含 0-' + MAX_OPENALEX_TOPIC_IDS + ' 个 Topic ID。');
+  }
+
+  const seen = Object.create(null);
+  return value.map(function(item) {
+    if (typeof item !== 'string') {
+      throw new Error(propertyName + ' 中 ' + fieldName + ' 只能包含字符串。');
+    }
+    const match = item.trim().match(/^(?:https:\/\/openalex\.org\/)?(T[0-9]+)$/i);
+    if (!match) {
+      throw new Error(propertyName + ' 中 ' + fieldName + ' 包含无效 OpenAlex Topic ID。');
+    }
+    const topicId = match[1].toUpperCase();
+    if (seen[topicId]) {
+      throw new Error(propertyName + ' 中 ' + fieldName + ' 包含重复 Topic ID：' + topicId + '。');
+    }
+    seen[topicId] = true;
+    return topicId;
+  });
 }
 
 /**
  * 在正式推送或创建触发器前检查必需配置，不输出任何凭证值。
  */
 function assertLiteratureRadarRuntimeConfig_() {
-  const directions = getConfiguredDirections_();
+  const runtimeConfig = getLiteratureRadarConfig_();
   const apiKey = getConfiguredValue_(PROP_OPENALEX_API_KEY, '');
   const webhook = getConfiguredValue_(PROP_FEISHU_WEBHOOK, CONFIG.FEISHU_WEBHOOK);
   if (!apiKey) {
@@ -2664,10 +2949,8 @@ function assertLiteratureRadarRuntimeConfig_() {
   if (!isUsableFeishuWebhook_(webhook)) {
     throw new Error('未配置有效的 HTTPS 飞书 Webhook，已停止 Literature Radar。');
   }
-  return {
-    directions: directions,
-    apiKey: apiKey
-  };
+  runtimeConfig.apiKey = apiKey;
+  return runtimeConfig;
 }
 
 /**
@@ -2675,15 +2958,22 @@ function assertLiteratureRadarRuntimeConfig_() {
  */
 function validateLiteratureRadarConfig() {
   const properties = PropertiesService.getScriptProperties();
-  const directions = getConfiguredDirections_();
+  const runtimeConfig = getLiteratureRadarConfig_();
+  const directions = runtimeConfig.directions;
   const summary = {
+    schemaVersion: runtimeConfig.schemaVersion,
+    configSource: runtimeConfig.source,
+    language: runtimeConfig.language,
+    yearsBack: runtimeConfig.yearsBack,
     directionCount: directions.length,
     directions: directions.map(function(direction) {
       return {
         id: direction.id,
         label: direction.label,
         activeSearchKeywordCount: direction.activeSearchKeywords.length,
-        scoringKeywordCount: direction.keywords.length
+        scoringKeywordCount: direction.keywords.length,
+        excludeKeywordCount: (direction.excludeKeywords || []).length,
+        openAlexTopicCount: (direction.openAlexTopicIds || []).length
       };
     }),
     openAlexApiKeyConfigured: !!String(properties.getProperty(PROP_OPENALEX_API_KEY) || '').trim(),

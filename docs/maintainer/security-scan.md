@@ -1,6 +1,6 @@
 # Security Scan Report
 
-扫描日期：2026-07-14
+扫描日期：2026-07-15
 
 ## 范围
 
@@ -19,7 +19,7 @@
 | OpenAlex API Key | PASSED | 仅存在属性名和占位说明，未保存 Key 值 |
 | Apps Script 凭证 | PASSED | `.clasp.json`、`.clasprc.json` 未被跟踪且已忽略 |
 | `.env` 与凭证文件 | PASSED | `.env`、`credentials.json`、`token.json` 未被跟踪且已忽略 |
-| 配置示例 | PASSED | 只包含研究方向与关键词，不含凭证或个人数据 |
+| 配置示例 | PASSED | v2 与旧版示例只包含研究方向和筛选字段，不含凭证或个人数据 |
 | Git 元数据 | PASSED | 可达提交使用 GitHub noreply 邮箱 |
 | 运行日志与缓存 | PASSED | 未跟踪执行日志、推送历史或 Apps Script 缓存 |
 
@@ -31,9 +31,9 @@
 
 未发现需要轮换的已提交凭证。当前代码安全扫描为 **PASSED**，但仓库在以下事项完成前仍不应改为 Public：
 
-1. 选择并添加开源许可证；
-2. 在全新 Apps Script 项目完成 fresh-install 验证；
-3. 完成历史隐私复核；
+1. 在全新 Apps Script 项目完成 fresh-install 验证；
+2. 完成历史隐私复核；
+3. 启用 GitHub Private Vulnerability Reporting；
 4. 所有者明确确认公开。
 
 详细发布门禁见 [`RELEASE_CHECKLIST.md`](../../RELEASE_CHECKLIST.md)。

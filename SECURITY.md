@@ -18,6 +18,6 @@ Keep credentials in Apps Script Properties:
 - `FEISHU_WEBHOOK`
 - `FEISHU_SIGN_SECRET`
 
-`LITERATURE_DIRECTIONS_JSON` is configuration rather than a credential, but storing it in Script Properties keeps each installation independent from the repository defaults.
+`LITERATURE_RADAR_CONFIG_JSON` and the legacy `LITERATURE_DIRECTIONS_JSON` are configuration rather than credentials, but storing them in Script Properties keeps each installation independent from the repository defaults.
 
 Never commit `.clasp.json`, `.clasprc.json`, `.env` files, OAuth credentials, tokens, or exported Apps Script properties. If a credential is exposed, revoke or rotate it before removing it from the repository.
