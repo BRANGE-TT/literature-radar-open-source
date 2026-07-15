@@ -33,7 +33,8 @@
 
 1. 在全新 Apps Script 项目完成 fresh-install 验证；
 2. 完成历史隐私复核；
-3. 启用 GitHub Private Vulnerability Reporting；
-4. 所有者明确确认公开。
+3. 所有者明确确认公开。
+
+GitHub Private Vulnerability Reporting 只对 Public 仓库开放；可见性切换后应立即启用并验证报告入口。
 
 详细发布门禁见 [`RELEASE_CHECKLIST.md`](../../RELEASE_CHECKLIST.md)。
