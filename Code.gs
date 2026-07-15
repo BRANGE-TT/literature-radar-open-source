@@ -781,9 +781,9 @@ function buildOpenAlexWorksQuery_(directionConfig, dateRange) {
       'from_publication_date:' + range.fromDate,
       'to_publication_date:' + range.toDate,
       'language:en',
-      'is_retracted:false',
-      'title_and_abstract.search:' + keywords.join(' OR ')
+      'is_retracted:false'
     ].join(','),
+    search: keywords.join(' OR '),
     sort: 'cited_by_count:desc',
     select: [
       'id',

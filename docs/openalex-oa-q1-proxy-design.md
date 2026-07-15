@@ -25,7 +25,8 @@ Google Scholar Alert 与 Gmail 解析模块仍保留为可选补充流程。Open
 
 ## 数据流
 
-1. `runEveryTwoDaysOpenAlexPush()` 分别为两个方向查询近五年英文 Works；关键词通过 `title_and_abstract.search` 检索，并按最多 6 个一组拆分，合并后去重。
+1. `runEveryTwoDaysOpenAlexPush()` 分别为每个配置方向查询近五年英文 Works；关键词通过 OpenAlex 顶层 `search` 参数检索，并按最多 6 个一组拆分，合并后去重。
+   顶层 `search` 覆盖标题、摘要和全文，范围比旧的 `title_and_abstract.search` 更广；迁移保留未加引号的 `OR` 表达式以避免无意收窄召回，部署后需用 `testEveryTwoDaysDryRun()` 核对最终候选质量。
 2. 过滤非英文、已撤稿、超出日期范围、已推送、标题为空和明显非论文的候选。
 3. 只对方向关键词命中的候选补查完整 Source 指标。
 4. 同一来源一次执行只请求一次，每个方向最多补查 20 个唯一来源。

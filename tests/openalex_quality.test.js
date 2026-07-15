@@ -576,8 +576,8 @@ test('builds OpenAlex works query with direction keywords and date range', funct
     { fromDate: '2021-07-04', toDate: '2026-07-04' }
   );
 
-  assert.strictEqual(typeof query.search, 'undefined');
-  assert.ok(query.filter.includes('title_and_abstract.search:survival analysis OR clinical trial design'));
+  assert.strictEqual(query.search, 'survival analysis OR clinical trial design');
+  assert.ok(!query.filter.includes('.search:'));
   assert.ok(query.filter.includes('from_publication_date:2021-07-04'));
   assert.ok(query.filter.includes('to_publication_date:2026-07-04'));
   assert.ok(query.filter.includes('language:en'));
@@ -599,11 +599,9 @@ test('splits broad OpenAlex searches and preserves the per-direction result budg
     return total + query.per_page;
   }, 0), 75);
   queries.forEach(function(query) {
-    const searchFilter = query.filter.split(',').filter(function(value) {
-      return value.indexOf('title_and_abstract.search:') === 0;
-    })[0];
-    assert.ok(searchFilter);
-    assert.ok(searchFilter.replace('title_and_abstract.search:', '').split(' OR ').length <= 6);
+    assert.ok(query.search);
+    assert.ok(query.search.split(' OR ').length <= 6);
+    assert.ok(!query.filter.includes('.search:'));
     assert.strictEqual(query.sort, 'cited_by_count:desc');
   });
 });
@@ -660,7 +658,7 @@ test('loads custom directions and reuses scoring keywords for active search', fu
     fromDate: '2021-01-01',
     toDate: '2026-01-01'
   });
-  assert(query.filter.includes('title_and_abstract.search:causal inference OR target trial'));
+  assert.strictEqual(query.search, 'causal inference OR target trial');
 
   const selected = customApi.selectBestPaperForDirection_([
     makePaper('A target trial emulation study', 'Example Journal', 1, 2, 3)
@@ -686,8 +684,8 @@ test('keeps active search and scoring keyword roles separate when both are confi
     toDate: '2026-01-01'
   });
 
-  assert(query.filter.includes('title_and_abstract.search:precision medicine study'));
-  assert(!query.filter.includes('genomic biomarker'));
+  assert.strictEqual(query.search, 'precision medicine study');
+  assert(!query.search.includes('genomic biomarker'));
   const selected = customApi.selectBestPaperForDirection_([
     makePaper('A genomic biomarker validation study', 'Example Journal', 1, 2, 3)
   ], direction, [], {});
