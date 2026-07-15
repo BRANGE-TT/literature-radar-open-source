@@ -101,6 +101,7 @@ function loadCode(options) {
         selectBestOpenAlexWorkMatch_: typeof selectBestOpenAlexWorkMatch_ === 'function' ? selectBestOpenAlexWorkMatch_ : undefined,
         extractSourceFromOpenAlexWork_: typeof extractSourceFromOpenAlexWork_ === 'function' ? extractSourceFromOpenAlexWork_ : undefined,
         buildFeishuMessage_: typeof buildFeishuMessage_ === 'function' ? buildFeishuMessage_ : undefined,
+        getDateRange_: typeof getDateRange_ === 'function' ? getDateRange_ : undefined,
         getFiveYearDateRange_: typeof getFiveYearDateRange_ === 'function' ? getFiveYearDateRange_ : undefined,
         reconstructAbstract_: typeof reconstructAbstract_ === 'function' ? reconstructAbstract_ : undefined,
         normalizeOpenAlexWorkToPaper_: typeof normalizeOpenAlexWorkToPaper_ === 'function' ? normalizeOpenAlexWorkToPaper_ : undefined,
@@ -112,8 +113,14 @@ function loadCode(options) {
         makePaperKey_: typeof makePaperKey_ === 'function' ? makePaperKey_ : undefined,
         buildOpenAlexWorksQuery_: typeof buildOpenAlexWorksQuery_ === 'function' ? buildOpenAlexWorksQuery_ : undefined,
         buildOpenAlexWorksQueries_: typeof buildOpenAlexWorksQueries_ === 'function' ? buildOpenAlexWorksQueries_ : undefined,
+        searchOpenAlexWorksByDirection_: typeof searchOpenAlexWorksByDirection_ === 'function' ? searchOpenAlexWorksByDirection_ : undefined,
         dedupeOpenAlexWorks_: typeof dedupeOpenAlexWorks_ === 'function' ? dedupeOpenAlexWorks_ : undefined,
+        isValidActiveSearchPaper_: typeof isValidActiveSearchPaper_ === 'function' ? isValidActiveSearchPaper_ : undefined,
+        matchesDirectionExclusion_: typeof matchesDirectionExclusion_ === 'function' ? matchesDirectionExclusion_ : undefined,
+        applyFinalScores_: typeof applyFinalScores_ === 'function' ? applyFinalScores_ : undefined,
         getOpenAlexRetryAfterMs_: typeof getOpenAlexRetryAfterMs_ === 'function' ? getOpenAlexRetryAfterMs_ : undefined,
+        getLiteratureRadarConfig_: typeof getLiteratureRadarConfig_ === 'function' ? getLiteratureRadarConfig_ : undefined,
+        parseLiteratureRadarConfig_: typeof parseLiteratureRadarConfig_ === 'function' ? parseLiteratureRadarConfig_ : undefined,
         getConfiguredDirections_: typeof getConfiguredDirections_ === 'function' ? getConfiguredDirections_ : undefined,
         parseConfiguredDirections_: typeof parseConfiguredDirections_ === 'function' ? parseConfiguredDirections_ : undefined,
         validateLiteratureRadarConfig: typeof validateLiteratureRadarConfig === 'function' ? validateLiteratureRadarConfig : undefined,
@@ -124,6 +131,7 @@ function loadCode(options) {
         setupEveryTwoDaysTrigger: typeof setupEveryTwoDaysTrigger === 'function' ? setupEveryTwoDaysTrigger : undefined,
         listLiteratureRadarTriggers: typeof listLiteratureRadarTriggers === 'function' ? listLiteratureRadarTriggers : undefined,
         removeEveryTwoDaysTrigger: typeof removeEveryTwoDaysTrigger === 'function' ? removeEveryTwoDaysTrigger : undefined,
+        PROP_LITERATURE_RADAR_CONFIG_JSON_: typeof PROP_LITERATURE_RADAR_CONFIG_JSON !== 'undefined' ? PROP_LITERATURE_RADAR_CONFIG_JSON : undefined,
         PROP_LITERATURE_DIRECTIONS_JSON_: typeof PROP_LITERATURE_DIRECTIONS_JSON !== 'undefined' ? PROP_LITERATURE_DIRECTIONS_JSON : undefined,
         CONFIG_: typeof CONFIG !== 'undefined' ? CONFIG : undefined
       };
@@ -641,6 +649,317 @@ test('uses default directions only when custom configuration is absent or blank'
   );
 });
 
+test('loads v2 config before legacy and normalizes cross-domain fields', function() {
+  const configV2 = {
+    schemaVersion: 2,
+    language: ' FR ',
+    yearsBack: 3,
+    directions: [{
+      id: 'health_economics',
+      label: '卫生经济学',
+      activeSearchKeywords: ['cost effectiveness'],
+      keywords: ['cost effectiveness', 'health economics'],
+      excludeKeywords: [' Animal Model ', 'animal model', 'rodent'],
+      openAlexTopicIds: ['T123', 'https://openalex.org/T456']
+    }]
+  };
+  const v2Api = loadCode({
+    properties: {
+      LITERATURE_RADAR_CONFIG_JSON: JSON.stringify(configV2),
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'legacy',
+        label: 'Legacy',
+        keywords: ['legacy']
+      }])
+    }
+  });
+  const config = v2Api.getLiteratureRadarConfig_();
+
+  assert.strictEqual(config.schemaVersion, 2);
+  assert.strictEqual(config.source, 'v2');
+  assert.strictEqual(config.language, 'fr');
+  assert.strictEqual(config.yearsBack, 3);
+  assert.strictEqual(config.directions[0].id, 'health_economics');
+  assert.strictEqual(
+    JSON.stringify(config.directions[0].excludeKeywords),
+    JSON.stringify(['Animal Model', 'rodent'])
+  );
+  assert.strictEqual(
+    JSON.stringify(config.directions[0].openAlexTopicIds),
+    JSON.stringify(['T123', 'T456'])
+  );
+  assert.strictEqual(v2Api.getConfiguredDirections_()[0].id, 'health_economics');
+});
+
+test('keeps default and legacy runtime settings backward compatible', function() {
+  const defaultConfig = loadCode().getLiteratureRadarConfig_();
+  const legacyConfig = loadCode({
+    properties: {
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'causal_inference',
+        label: '因果推断',
+        keywords: ['causal inference']
+      }])
+    }
+  }).getLiteratureRadarConfig_();
+
+  assert.strictEqual(defaultConfig.schemaVersion, 1);
+  assert.strictEqual(defaultConfig.source, 'default');
+  assert.strictEqual(defaultConfig.language, 'en');
+  assert.strictEqual(defaultConfig.yearsBack, 5);
+  assert.strictEqual(legacyConfig.schemaVersion, 1);
+  assert.strictEqual(legacyConfig.source, 'legacy');
+  assert.strictEqual(legacyConfig.language, 'en');
+  assert.strictEqual(legacyConfig.yearsBack, 5);
+});
+
+test('rejects invalid explicit v2 config without falling back to legacy', function() {
+  const direction = {
+    id: 'topic',
+    label: 'Topic',
+    keywords: ['topic']
+  };
+  const invalidValues = [
+    '{bad json',
+    JSON.stringify({ schemaVersion: 1, directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, language: ['en'], directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, language: 'eng', directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, yearsBack: 0, directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, yearsBack: 21, directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, yearsBack: 1.5, directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, yearsBack: '3', directions: [direction] }),
+    JSON.stringify({ schemaVersion: 2, directions: [direction], yearBack: 3 }),
+    JSON.stringify({
+      schemaVersion: 2,
+      directions: [Object.assign({}, direction, { unknownField: true })]
+    }),
+    JSON.stringify({
+      schemaVersion: 2,
+      directions: [Object.assign({}, direction, { label: 'Topic\nInjected' })]
+    }),
+    JSON.stringify({
+      schemaVersion: 2,
+      directions: [Object.assign({}, direction, { keywords: ['topic\ninjected'] })]
+    }),
+    JSON.stringify({
+      schemaVersion: 2,
+      directions: [Object.assign({}, direction, { openAlexTopicIds: ['invalid'] })]
+    }),
+    JSON.stringify({
+      schemaVersion: 2,
+      directions: [Object.assign({}, direction, {
+        openAlexTopicIds: ['T123', 'https://openalex.org/T123']
+      })]
+    })
+  ];
+
+  invalidValues.forEach(function(value) {
+    const invalidApi = loadCode({
+      properties: {
+        LITERATURE_RADAR_CONFIG_JSON: value,
+        LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+          id: 'legacy',
+          label: 'Legacy',
+          keywords: ['legacy']
+        }])
+      }
+    });
+    assert.throws(function() {
+      invalidApi.getLiteratureRadarConfig_();
+    }, /LITERATURE_RADAR_CONFIG_JSON/);
+  });
+});
+
+test('accepts v2 yearsBack boundaries and lets blank v2 fall through to legacy', function() {
+  const direction = {
+    id: 'topic',
+    label: 'Topic',
+    keywords: ['topic']
+  };
+  [1, 20].forEach(function(yearsBack) {
+    const config = api.parseLiteratureRadarConfig_(JSON.stringify({
+      schemaVersion: 2,
+      yearsBack: yearsBack,
+      directions: [direction]
+    }));
+    assert.strictEqual(config.yearsBack, yearsBack);
+  });
+
+  const legacyApi = loadCode({
+    properties: {
+      LITERATURE_RADAR_CONFIG_JSON: '   ',
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([direction])
+    }
+  });
+  assert.strictEqual(legacyApi.getLiteratureRadarConfig_().source, 'legacy');
+});
+
+test('keeps the checked-in v2 example valid against the real parser', function() {
+  const raw = fs.readFileSync(
+    path.join(__dirname, '..', 'examples', 'config-v2.example.json'),
+    'utf8'
+  );
+  const config = api.parseLiteratureRadarConfig_(raw);
+
+  assert.strictEqual(config.schemaVersion, 2);
+  assert(config.directions.length > 0);
+});
+
+test('applies v2 language and topic filters to every search chunk', function() {
+  const v2Api = loadCode({
+    properties: {
+      LITERATURE_RADAR_CONFIG_JSON: JSON.stringify({
+        schemaVersion: 2,
+        language: 'fr',
+        directions: [{
+          id: 'public_health',
+          label: 'Santé publique',
+          activeSearchKeywords: Array.from({ length: 7 }, function(_value, index) {
+            return 'terme ' + index;
+          }),
+          keywords: ['santé publique'],
+          openAlexTopicIds: ['T123', 'T456']
+        }]
+      })
+    }
+  });
+  const config = v2Api.getLiteratureRadarConfig_();
+  const queries = v2Api.buildOpenAlexWorksQueries_(
+    config.directions[0],
+    { fromDate: '2023-01-01', toDate: '2026-01-01' },
+    { language: config.language }
+  );
+
+  assert.strictEqual(queries.length, 2);
+  queries.forEach(function(query) {
+    assert(query.filter.includes('language:fr'));
+    assert(query.filter.includes('topics.id:T123|T456'));
+  });
+});
+
+test('uses v2 yearsBack for date range and final freshness scoring', function() {
+  const range = api.getDateRange_(3, new Date('2026-07-04T12:00:00Z'));
+  const papers = [{
+    relatedness_score: 1,
+    publicationDate: '2023-07-04',
+    publicationYear: 2023,
+    emailDate: new Date('2023-07-04T00:00:00Z'),
+    citation_score: 0,
+    venue_quality_score: 0
+  }];
+
+  assert.strictEqual(range.fromDate, '2023-07-04');
+  assert.strictEqual(range.toDate, '2026-07-04');
+  api.applyFinalScores_(papers, range);
+  assert.strictEqual(papers[0].freshness_score, 0);
+});
+
+test('applies configured language and exclusions before selection', function() {
+  const range = { fromDate: '2023-01-01', toDate: '2026-12-31' };
+  const frenchPaper = {
+    title: 'Santé publique',
+    language: 'fr',
+    workType: 'article',
+    publicationDate: '2025-01-01',
+    link: 'https://example.org/french'
+  };
+  const englishPaper = Object.assign({}, frenchPaper, {
+    language: 'en',
+    link: 'https://example.org/english'
+  });
+  const direction = {
+    id: 'survival',
+    label: 'Survival',
+    keywords: ['survival'],
+    excludeKeywords: ['animal model']
+  };
+  const selected = api.selectBestPaperForDirection_([
+    makePaper('Survival animal model', 'Example Journal', 1, 2, 3),
+    makePaper('Survival outcomes in adults', 'Example Journal', 1, 2, 3)
+  ], direction, [], {});
+
+  assert.strictEqual(api.isValidActiveSearchPaper_(frenchPaper, range, [], 'fr'), true);
+  assert.strictEqual(api.isValidActiveSearchPaper_(englishPaper, range, [], 'fr'), false);
+  assert.strictEqual(
+    api.matchesDirectionExclusion_(makePaper('Survival animal model', 'Journal', 1, 2, 3), direction),
+    true
+  );
+  assert(selected);
+  assert.strictEqual(selected.title, 'Survival outcomes in adults');
+});
+
+test('matches exclusions against the full abstract without Latin substring false positives', function() {
+  const work = mockOpenAlexWork();
+  work.abstract_inverted_index = {
+    fillerword: Array.from({ length: 60 }, function(_value, index) { return index; }),
+    animal: [60],
+    model: [61]
+  };
+  const paper = api.normalizeOpenAlexWorkToPaper_(work);
+
+  assert.strictEqual(paper.snippet.indexOf('animal model'), -1);
+  assert.strictEqual(
+    api.matchesDirectionExclusion_(paper, { excludeKeywords: ['animal model'] }),
+    true
+  );
+  assert.strictEqual(
+    api.matchesDirectionExclusion_({ title: 'Stratified survival analysis' }, { excludeKeywords: ['rat'] }),
+    false
+  );
+  assert.strictEqual(
+    api.matchesDirectionExclusion_({ title: 'A rat model' }, { excludeKeywords: ['rat'] }),
+    true
+  );
+  assert.strictEqual(
+    api.matchesDirectionExclusion_({ title: '动物模型研究' }, { excludeKeywords: ['动物模型'] }),
+    true
+  );
+});
+
+test('wires v2 date language topics and exclusions into active OpenAlex search', function() {
+  const requestedUrls = [];
+  const excludedWork = mockOpenAlexWork();
+  excludedWork.id = 'https://openalex.org/W-excluded';
+  excludedWork.language = 'fr';
+  excludedWork.abstract_inverted_index = {
+    fillerword: Array.from({ length: 60 }, function(_value, index) { return index; }),
+    protocol: [60]
+  };
+  const searchApi = loadCode({
+    urlFetch: function(url) {
+      requestedUrls.push(url);
+      return {
+        getResponseCode: function() { return 200; },
+        getContentText: function() { return JSON.stringify({ results: [excludedWork] }); }
+      };
+    }
+  });
+  const direction = {
+    id: 'evidence',
+    label: 'Evidence',
+    activeSearchKeywords: Array.from({ length: 7 }, function(_value, index) {
+      return 'term ' + index;
+    }),
+    keywords: ['clinical trial'],
+    excludeKeywords: ['protocol'],
+    openAlexTopicIds: ['T123']
+  };
+  const papers = searchApi.searchOpenAlexWorksByDirection_(direction, 'test-key', [], {
+    language: 'fr',
+    dateRange: { fromDate: '2024-01-01', toDate: '2026-07-15' }
+  });
+
+  assert.strictEqual(requestedUrls.length, 2);
+  requestedUrls.forEach(function(url) {
+    const decoded = decodeURIComponent(url);
+    assert(decoded.includes('from_publication_date:2024-01-01'));
+    assert(decoded.includes('to_publication_date:2026-07-15'));
+    assert(decoded.includes('language:fr'));
+    assert(decoded.includes('topics.id:T123'));
+  });
+  assert.strictEqual(papers.length, 0);
+});
+
 test('loads custom directions and reuses scoring keywords for active search', function() {
   const custom = [
     {
@@ -806,23 +1125,41 @@ test('rejects invalid custom direction configuration without fallback', function
 test('prints a credential-free configuration summary', function() {
   const customApi = loadCode({
     properties: {
-      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
-        id: 'evidence_synthesis',
-        label: '证据综合',
-        keywords: ['systematic review']
-      }]),
+      LITERATURE_RADAR_CONFIG_JSON: JSON.stringify({
+        schemaVersion: 2,
+        language: 'es',
+        yearsBack: 4,
+        directions: [{
+          id: 'evidence_synthesis',
+          label: '证据综合',
+          keywords: ['systematic review'],
+          excludeKeywords: ['protocol'],
+          openAlexTopicIds: ['T123']
+        }]
+      }),
       OPENALEX_API_KEY: 'private-openalex-value',
-      FEISHU_WEBHOOK: 'https://example.test/private-webhook-value'
+      FEISHU_WEBHOOK: 'https://example.test/private-webhook-value',
+      FEISHU_SIGN_SECRET: 'private-sign-value'
     }
   });
   const summary = customApi.validateLiteratureRadarConfig();
   const logged = customApi.__state.logs.join('\n');
 
+  assert.strictEqual(summary.schemaVersion, 2);
+  assert.strictEqual(summary.configSource, 'v2');
+  assert.strictEqual(summary.language, 'es');
+  assert.strictEqual(summary.yearsBack, 4);
   assert.strictEqual(summary.directionCount, 1);
+  assert.strictEqual(summary.directions[0].excludeKeywordCount, 1);
+  assert.strictEqual(summary.directions[0].openAlexTopicCount, 1);
   assert.strictEqual(summary.openAlexApiKeyConfigured, true);
   assert.strictEqual(summary.feishuWebhookConfigured, true);
   assert(!logged.includes('private-openalex-value'));
   assert(!logged.includes('private-webhook-value'));
+  assert(!logged.includes('private-sign-value'));
+  assert(!logged.includes('systematic review'));
+  assert(!logged.includes('protocol'));
+  assert(!logged.includes('T123'));
 });
 
 test('redacts configured credentials and credential-bearing URLs from error logs', function() {
@@ -889,6 +1226,33 @@ test('validates custom directions before replacing the production trigger', func
   assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 0);
   assert.strictEqual(triggerApi.__state.createdTriggerSpecs.length, 0);
   assert.strictEqual(triggerApi.__state.triggers.length, 2);
+});
+
+test('rejects invalid v2 config before replacing the production trigger', function() {
+  const triggerApi = loadCode({
+    properties: {
+      LITERATURE_RADAR_CONFIG_JSON: JSON.stringify({
+        schemaVersion: 2,
+        yearsBack: 0,
+        directions: [{ id: 'topic', label: 'Topic', keywords: ['topic'] }]
+      }),
+      LITERATURE_DIRECTIONS_JSON: JSON.stringify([{
+        id: 'legacy',
+        label: 'Legacy',
+        keywords: ['legacy']
+      }]),
+      OPENALEX_API_KEY: 'test-openalex-key',
+      FEISHU_WEBHOOK: 'https://example.test/webhook'
+    },
+    triggers: [{ handlerFunction: 'runEveryTwoDaysOpenAlexPush' }]
+  });
+
+  assert.throws(function() {
+    triggerApi.setupEveryTwoDaysTrigger();
+  }, /LITERATURE_RADAR_CONFIG_JSON/);
+  assert.strictEqual(triggerApi.__state.deletedTriggerHandlers.length, 0);
+  assert.strictEqual(triggerApi.__state.createdTriggerSpecs.length, 0);
+  assert.strictEqual(triggerApi.__state.triggers.length, 1);
 });
 
 test('lists replaces and removes only the production Literature Radar trigger', function() {

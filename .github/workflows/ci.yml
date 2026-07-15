@@ -26,4 +26,4 @@ jobs:
         run: node --check < Code.gs
 
       - name: Validate JSON files
-        run: node -e "const fs=require('fs'); ['appsscript.json','examples/directions.example.json'].forEach(f=>JSON.parse(fs.readFileSync(f,'utf8'))); console.log('json ok')"
+        run: node -e "const fs=require('fs'); ['appsscript.json','examples/directions.example.json','examples/config-v2.example.json'].forEach(f=>JSON.parse(fs.readFileSync(f,'utf8'))); console.log('json ok')"

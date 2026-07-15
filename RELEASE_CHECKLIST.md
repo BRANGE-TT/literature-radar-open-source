@@ -5,6 +5,7 @@ Use this checklist before changing the GitHub repository from Private to Public.
 ## Required
 
 - [x] Research directions can be configured without editing `Code.gs`.
+- [x] Versioned config v2 supports language, lookback years, exclusions, and OpenAlex Topic IDs while preserving the legacy direction array.
 - [x] Invalid explicit configuration fails before sending or replacing a trigger.
 - [x] Default directions remain backward compatible.
 - [x] Offline tests, Apps Script syntax, manifest, and example JSON pass.

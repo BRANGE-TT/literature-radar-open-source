@@ -1,14 +1,14 @@
 # OpenAlex OA-Q1 Proxy 设计文档
 
-更新日期：2026-07-13
+更新日期：2026-07-15
 
 ## 背景
 
 当前 Google Apps Script 项目已经实现：
 
 - 每两日早上约 7:30 自动运行；
-- 主动调用 OpenAlex Works API 检索近五年英文文献；
-- 按生存分析领域和医学机器学习方向各筛选 1 篇；
+- 主动调用 OpenAlex Works API，默认检索近五年英文文献；
+- 按 1–5 个用户配置方向各筛选 1 篇；
 - 通过飞书 Webhook 推送；
 - 使用 `PropertiesService` 保存已推送论文指纹。
 
@@ -23,12 +23,19 @@ Google Scholar Alert 与 Gmail 解析模块仍保留为可选补充流程。Open
 - 所有新增代码保持 Apps Script JavaScript，可直接粘贴到 `Code.gs`。
 - 推送文案明确说明 OA-Q1 proxy 不是官方 JCR quartile。
 
+## 配置兼容层
+
+- 推荐属性 `LITERATURE_RADAR_CONFIG_JSON` 使用 `schemaVersion: 2`，支持全局 `language`、`yearsBack`，以及每方向 `excludeKeywords`、`openAlexTopicIds`；`language` 使用 OpenAlex 的两位语言代码。
+- 读取优先级是 v2 → 旧版 `LITERATURE_DIRECTIONS_JSON` → 内置默认方向；显式 v2 无效时直接停止，不回退到旧属性。
+- v2 拒绝未知字段、语言格式错误、无效年限和重复 Topic ID，防止拼写错误被静默忽略；旧版方向数组保持原有兼容行为。
+- `papersPerDirection`、调度/时区和评分预设不属于 v2.0：它们需要先分别重构排名、全链路时间语义和 OA-Q1 proxy 优先级。
+
 ## 数据流
 
-1. `runEveryTwoDaysOpenAlexPush()` 分别为每个配置方向查询近五年英文 Works；关键词通过 OpenAlex 顶层 `search` 参数检索，并按最多 6 个一组拆分，合并后去重。
+1. `runEveryTwoDaysOpenAlexPush()` 按配置语言与回溯年限为每个方向查询 Works；关键词通过 OpenAlex 顶层 `search` 参数检索，并按最多 6 个一组拆分，合并后去重。
    顶层 `search` 覆盖标题、摘要和全文，范围比旧的 `title_and_abstract.search` 更广；迁移保留未加引号的 `OR` 表达式以避免无意收窄召回，部署后需用 `testEveryTwoDaysDryRun()` 核对最终候选质量。
    每个查询由 OpenAlex 优先按 `relevance_score` 排序；分块合并时以返回分数作启发式排序、再以引用量打破同分，并为重复 work 保留排名更高的版本，避免正文偶然命中的高引论文挤占候选预算。
-2. 过滤非英文、已撤稿、超出日期范围、已推送、标题为空和明显非论文的候选。
+2. 在每个分块应用语言和 `topics.id` 过滤，再排除已撤稿、超出日期范围、已推送、标题为空、明显非论文及命中本地方向排除词的候选。排除词检查标题、完整摘要和来源；英文/数字词按词或短语边界匹配，CJK 词按连续文本匹配。
 3. 只对方向关键词命中的候选补查完整 Source 指标。
 4. 同一来源一次执行只请求一次，每个方向最多补查 20 个唯一来源。
 5. 每个研究方向内部分别计算关键词相关度、来源指标百分位、引用百分位和新鲜度。
@@ -212,14 +219,14 @@ OA-Q1 proxy is based on OpenAlex metrics and is not official JCR quartile.
 ## 错误处理
 
 - `OPENALEX_API_KEY` 为空：记录日志并停止主动检索主流程，不发送空结果消息。
-- OpenAlex Works 请求失败：记录日志，该方向返回空候选，不中断另一个方向和消息构建。
+- OpenAlex Works 请求失败：记录日志，该方向返回空候选，不中断其他方向和消息构建。
 - OpenAlex Source 请求失败：保留论文，来源质量分使用降级逻辑，并在 Note 中说明。
 - OpenAlex 返回 429：按 `retryAfter` 等待并重试一次，避免短时限流直接清空候选。
 - JSON 解析失败：记录日志，跳过当前 enrichment。
 - source 为空：设置 `source_display_name = UNKNOWN_SOURCE`。
 - summary stats 缺失：指标记为 `null`，百分位按 0。
 - 标题匹配相似度低：不绑定 OpenAlex work。
-- 两个方向都找不到文献：仍推送“今日未检索到合适文献”。
+- 所有方向都找不到文献：仍推送“今日未检索到合适文献”。
 
 ## 验证范围
 
@@ -244,6 +251,7 @@ OA-Q1 proxy is based on OpenAlex metrics and is not official JCR quartile.
 - 验证来源指标补查、同来源去重请求和失败降级；
 - 验证候选类型过滤和缓存清理；
 - 验证百分位、白名单、OA-Q1 proxy 和 final score 排序；
-- 验证去重 key、消息格式和近五年动态日期范围。
+- 验证去重 key、消息格式和动态日期范围；
+- 验证 v2 优先级与严格校验、旧版兼容、语言/Topic 分块传播、排除词和配置摘要脱敏。
 
 验证命令见项目 `README.md`；当前测试同时覆盖 Apps Script 纯函数逻辑、脚本语法和 manifest JSON。

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "language": "en",
+  "yearsBack": 5,
+  "directions": [
+    {
+      "id": "causal_inference",
+      "label": "因果推断",
+      "activeSearchKeywords": [
+        "causal inference",
+        "target trial emulation",
+        "propensity score"
+      ],
+      "keywords": [
+        "causal inference",
+        "target trial",
+        "propensity score",
+        "inverse probability weighting"
+      ],
+      "excludeKeywords": [
+        "animal model"
+      ],
+      "openAlexTopicIds": []
+    },
+    {
+      "id": "medical_ai",
+      "label": "医学人工智能",
+      "activeSearchKeywords": [
+        "medical artificial intelligence",
+        "clinical machine learning",
+        "medical foundation model"
+      ],
+      "keywords": [
+        "artificial intelligence",
+        "machine learning",
+        "foundation model",
+        "clinical"
+      ],
+      "excludeKeywords": [
+        "veterinary"
+      ],
+      "openAlexTopicIds": [
+        "T10000"
+      ]
+    }
+  ]
+}
