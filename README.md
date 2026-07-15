@@ -192,6 +192,10 @@ Get-Content -Raw -Encoding UTF8 Code.gs | node --check -
 
 贡献说明见 [`CONTRIBUTING.md`](CONTRIBUTING.md)，安全报告方式见 [`SECURITY.md`](SECURITY.md)。不要提交 `.clasp.json`、`.clasprc.json`、Webhook、API Key、OAuth Token、Script Properties 导出或未脱敏日志。
 
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。
+
 ## 常见问题
 
 ### 配置后仍在使用默认方向
