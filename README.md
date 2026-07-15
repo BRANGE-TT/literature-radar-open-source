@@ -147,7 +147,7 @@ setupEveryTwoDaysTrigger()
 
 ## 检索与评分
 
-每个方向最多拉取 75 篇候选。检索词按最多 6 个一组拆分，合并后去重；每个方向最多补查 20 个唯一来源。
+每个方向最多拉取 75 篇候选。检索词按最多 6 个一组拆分，结果优先按 OpenAlex `relevance_score`、再按引用量排序，合并后去重；每个方向最多补查 20 个唯一来源。
 
 ```text
 venue_quality_score = 0.60 * P_2yr + 0.30 * P_h + 0.10 * P_i10

@@ -784,7 +784,7 @@ function buildOpenAlexWorksQuery_(directionConfig, dateRange) {
       'is_retracted:false'
     ].join(','),
     search: keywords.join(' OR '),
-    sort: 'cited_by_count:desc',
+    sort: 'relevance_score:desc,cited_by_count:desc',
     select: [
       'id',
       'doi',
@@ -795,6 +795,7 @@ function buildOpenAlexWorksQuery_(directionConfig, dateRange) {
       'type',
       'language',
       'cited_by_count',
+      'relevance_score',
       'authorships',
       'primary_location',
       'locations',
@@ -834,16 +835,29 @@ function dedupeOpenAlexWorks_(works, limit) {
     const key = work && work.id ||
       work && work.doi ||
       normalizeOpenAlexTitle_(work && (work.title || work.display_name));
-    if (!key || seen[key]) {
+    if (!key) {
       return;
     }
-    seen[key] = true;
+    if (Object.prototype.hasOwnProperty.call(seen, key)) {
+      const existingIndex = seen[key];
+      if (compareOpenAlexWorksBySearchRank_(work, unique[existingIndex]) < 0) {
+        unique[existingIndex] = work;
+      }
+      return;
+    }
+    seen[key] = unique.length;
     unique.push(work);
   });
-  unique.sort(function(a, b) {
-    return (b && b.cited_by_count || 0) - (a && a.cited_by_count || 0);
-  });
+  unique.sort(compareOpenAlexWorksBySearchRank_);
   return unique.slice(0, typeof limit === 'number' ? limit : unique.length);
+}
+
+function compareOpenAlexWorksBySearchRank_(a, b) {
+  const relevanceDiff = (b && b.relevance_score || 0) - (a && a.relevance_score || 0);
+  if (relevanceDiff !== 0) {
+    return relevanceDiff;
+  }
+  return (b && b.cited_by_count || 0) - (a && a.cited_by_count || 0);
 }
 
 /**

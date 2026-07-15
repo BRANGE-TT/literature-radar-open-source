@@ -2,6 +2,15 @@
 
 This file records only reusable, non-secret validation evidence. It intentionally omits local paths, Script IDs, Webhooks, API keys, OAuth data, and personal project details.
 
+## 2026-07-15 Top-Level Search Live Validation
+
+- Synced the current `Code.gs` to the isolated Apps Script development project and verified the reloaded editor content matched the local file after line-ending normalization.
+- `validateLiteratureRadarConfig()` completed with two directions and boolean-only credential status; no credential value or Script ID was logged.
+- The first top-level `search` run exposed irrelevant full-text matches when results were citation-first. The query and chunk merge were changed to prefer `relevance_score`, with citation count used only as a tie-breaker.
+- After the fix, `testEveryTwoDaysDryRun()` completed without an execution error: survival analysis returned 73 candidates and medical machine learning returned 61. The selected papers were relevant to Cox survival-model evaluation and generalist medical AI.
+- The dry run did not send Feishu messages or write formal pushed-paper history. It could update OpenAlex caches and execution logs.
+- This validates an equivalent manual handler execution only; a real time-driven `CLOCK` event has still not been observed.
+
 ## 2026-07-14 Isolated Development Validation
 
 - A separate Apps Script project was used for the open-source checkout.

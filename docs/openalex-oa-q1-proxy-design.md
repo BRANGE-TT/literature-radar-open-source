@@ -27,6 +27,7 @@ Google Scholar Alert 与 Gmail 解析模块仍保留为可选补充流程。Open
 
 1. `runEveryTwoDaysOpenAlexPush()` 分别为每个配置方向查询近五年英文 Works；关键词通过 OpenAlex 顶层 `search` 参数检索，并按最多 6 个一组拆分，合并后去重。
    顶层 `search` 覆盖标题、摘要和全文，范围比旧的 `title_and_abstract.search` 更广；迁移保留未加引号的 `OR` 表达式以避免无意收窄召回，部署后需用 `testEveryTwoDaysDryRun()` 核对最终候选质量。
+   每个查询由 OpenAlex 优先按 `relevance_score` 排序；分块合并时以返回分数作启发式排序、再以引用量打破同分，并为重复 work 保留排名更高的版本，避免正文偶然命中的高引论文挤占候选预算。
 2. 过滤非英文、已撤稿、超出日期范围、已推送、标题为空和明显非论文的候选。
 3. 只对方向关键词命中的候选补查完整 Source 指标。
 4. 同一来源一次执行只请求一次，每个方向最多补查 20 个唯一来源。

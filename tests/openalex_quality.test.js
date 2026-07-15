@@ -584,8 +584,9 @@ test('builds OpenAlex works query with direction keywords and date range', funct
   assert.ok(query.filter.includes('is_retracted:false'));
   assert.ok(query.select.includes('abstract_inverted_index'));
   assert.ok(query.select.includes('primary_location'));
+  assert.ok(query.select.includes('relevance_score'));
   assert.strictEqual(query.per_page, 75);
-  assert.strictEqual(query.sort, 'cited_by_count:desc');
+  assert.strictEqual(query.sort, 'relevance_score:desc,cited_by_count:desc');
 });
 
 test('splits broad OpenAlex searches and preserves the per-direction result budget', function() {
@@ -602,19 +603,23 @@ test('splits broad OpenAlex searches and preserves the per-direction result budg
     assert.ok(query.search);
     assert.ok(query.search.split(' OR ').length <= 6);
     assert.ok(!query.filter.includes('.search:'));
-    assert.strictEqual(query.sort, 'cited_by_count:desc');
+    assert.strictEqual(query.sort, 'relevance_score:desc,cited_by_count:desc');
   });
 });
 
-test('dedupes chunked OpenAlex works and keeps the most cited results first', function() {
+test('dedupes chunked OpenAlex works and keeps the most relevant results first', function() {
   const works = api.dedupeOpenAlexWorks_([
-    { id: 'https://openalex.org/W1', cited_by_count: 2 },
-    { id: 'https://openalex.org/W1', cited_by_count: 2 },
-    { id: 'https://openalex.org/W2', cited_by_count: 9 }
+    { id: 'https://openalex.org/W1', relevance_score: 8, cited_by_count: 2 },
+    { id: 'https://openalex.org/W1', relevance_score: 9, cited_by_count: 1 },
+    { id: 'https://openalex.org/W2', relevance_score: 3, cited_by_count: 99 },
+    { id: 'https://openalex.org/W3', relevance_score: 8, cited_by_count: 4 }
   ], 75);
 
-  assert.strictEqual(works.length, 2);
-  assert.strictEqual(works[0].id, 'https://openalex.org/W2');
+  assert.strictEqual(works.length, 3);
+  assert.strictEqual(works[0].id, 'https://openalex.org/W1');
+  assert.strictEqual(works[0].relevance_score, 9);
+  assert.strictEqual(works[1].id, 'https://openalex.org/W3');
+  assert.strictEqual(works[2].id, 'https://openalex.org/W2');
 });
 
 test('parses OpenAlex retryAfter seconds for one bounded retry', function() {
