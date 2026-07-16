@@ -1,6 +1,6 @@
 # Public Release Checklist
 
-Use this checklist before changing the GitHub repository from Private to Public.
+Use this checklist to record the completed Public beta transition and remaining release follow-up.
 
 ## Required
 
@@ -18,15 +18,15 @@ Use this checklist before changing the GitHub repository from Private to Public.
 - [x] Fresh installation and authorization are verified in a new standalone Apps Script project.
 - [x] Repository history privacy is reviewed; the remaining local paths, truncated Script IDs, and Script ID hash are non-secret and accepted without rewriting history.
 - [x] A final current-tree and reachable-history credential scan passes.
-- [ ] Repository owner explicitly approves changing visibility to Public.
+- [x] Repository owner explicitly approves changing visibility to Public.
 
 ## Visibility Change Sequence
 
 Private vulnerability reporting is available only after the repository is Public. Once the required checks above pass and the owner approves the change:
 
-- [ ] Change repository visibility to Public.
-- [ ] Immediately enable GitHub private vulnerability reporting.
-- [ ] Verify the Security page offers a private vulnerability report path.
+- [x] Change repository visibility to Public.
+- [x] Immediately enable GitHub private vulnerability reporting.
+- [x] Verify the Security page offers a private vulnerability report path.
 
 ## Beta Follow-up
 
