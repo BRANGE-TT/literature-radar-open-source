@@ -2,6 +2,20 @@
 
 This file records only reusable, non-secret validation evidence. It intentionally omits local paths, Script IDs, Webhooks, API keys, OAuth data, and personal project details.
 
+## 2026-07-16 Fresh-Install Validation
+
+- Created a new standalone Apps Script project and copied only the current `Code.gs` and `appsscript.json`; both editor models matched the repository files after line-ending normalization.
+- Installed the checked-in config v2 example plus test credentials through Script Properties. `validateLiteratureRadarConfig()` reported schema v2, two directions, and boolean-only credential status.
+- The original medical-AI example Topic produced no candidates. A current OpenAlex Topic lookup identified `T11636` (`Artificial Intelligence in Healthcare and Education`); after updating the example, dry run returned 74 causal-inference and 73 medical-AI candidates and selected relevant papers in both directions.
+- No Feishu message was sent, no pushed-paper history was written, and `listLiteratureRadarTriggers()` returned an empty list.
+- After validation, all 44 temporary Script Properties and caches were deleted, temporary helper functions were removed, and both editor files were rechecked against the repository.
+
+## 2026-07-16 Reachable-History Privacy Review
+
+- Reviewed all reachable commits for local paths, Script identifiers, credential patterns, and sensitive files.
+- Three early commits contain non-secret local directory names, two truncated Script IDs, and one SHA-256 fingerprint of a development Script ID. No complete Script ID, Webhook, API key, OAuth token, or tracked credential file was found.
+- The remaining metadata is accepted as low risk. Git history will not be rewritten or force-pushed for these items.
+
 ## 2026-07-15 Config v2 Live Validation
 
 - Synced the config v2 implementation to the isolated Apps Script development project and verified the editor content matched the local `Code.gs`.

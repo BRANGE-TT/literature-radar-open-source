@@ -25,15 +25,13 @@
 
 ## 隐私说明
 
-较早的验证提交包含非机密的本机路径、仓库名称和脱敏项目标识。这些内容不是认证凭证，但公开历史前仍需由仓库所有者完成隐私复核。当前版本已从维护报告中移除这些环境细节；未经明确授权不得 rewrite history 或 force push。
+已复核全部可达历史。三个早期提交仍包含非机密的本机目录、两个截断 Script ID 和一个开发 Script ID 的 SHA-256 指纹；未发现完整 Script ID 或认证凭证。上述元数据判定为低风险并接受保留，不为此 rewrite history 或 force push。
 
 ## 发布判定
 
 未发现需要轮换的已提交凭证。当前代码安全扫描为 **PASSED**，但仓库在以下事项完成前仍不应改为 Public：
 
-1. 在全新 Apps Script 项目完成 fresh-install 验证；
-2. 完成历史隐私复核；
-3. 所有者明确确认公开。
+1. 所有者明确确认公开。
 
 GitHub Private Vulnerability Reporting 只对 Public 仓库开放；可见性切换后应立即启用并验证报告入口。
 

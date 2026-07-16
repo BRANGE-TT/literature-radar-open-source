@@ -15,8 +15,8 @@ Use this checklist before changing the GitHub repository from Private to Public.
 - [x] Security and contribution policies are present.
 - [x] GitHub description and topics identify the project.
 - [x] Repository owner selects and adds an open-source license.
-- [ ] Fresh installation is verified in a new Apps Script project owned by a test account.
-- [ ] Repository history privacy is reviewed; old validation commits contain non-secret local environment metadata.
+- [x] Fresh installation and authorization are verified in a new standalone Apps Script project.
+- [x] Repository history privacy is reviewed; the remaining local paths, truncated Script IDs, and Script ID hash are non-secret and accepted without rewriting history.
 - [x] A final current-tree and reachable-history credential scan passes.
 - [ ] Repository owner explicitly approves changing visibility to Public.
 
