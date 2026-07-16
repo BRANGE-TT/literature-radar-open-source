@@ -2,6 +2,13 @@
 
 This file records only reusable, non-secret validation evidence. It intentionally omits local paths, Script IDs, Webhooks, API keys, OAuth data, and personal project details.
 
+## 2026-07-16 Public Beta Transition
+
+- The repository owner explicitly approved the visibility change, and the repository was changed from Private to Public using the authenticated GitHub CLI.
+- GitHub reported `visibility: PUBLIC`; an unauthenticated browser loaded the repository, README, and MIT License and displayed the Public badge.
+- Private Vulnerability Reporting was enabled through GitHub's repository API. The enable request returned HTTP 204, the status check returned HTTP 200, and the unauthenticated Security Advisories page displayed `Report a vulnerability`.
+- No release or tag was created. The project remains beta until the remaining follow-up items in `RELEASE_CHECKLIST.md` are completed.
+
 ## 2026-07-16 Fresh-Install Validation
 
 - Created a new standalone Apps Script project and copied only the current `Code.gs` and `appsscript.json`; both editor models matched the repository files after line-ending normalization.

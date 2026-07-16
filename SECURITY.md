@@ -6,9 +6,9 @@ Security fixes are applied to the latest commit on `main`. Until the first tagge
 
 ## Reporting a Vulnerability
 
-Use GitHub's private vulnerability reporting feature when it is available. Include the affected function, reproduction steps, expected impact, and a minimal proof of concept.
+Use GitHub's enabled private vulnerability reporting form on the repository Security page. Include the affected function, reproduction steps, expected impact, and a minimal proof of concept.
 
-Do not put credentials, private Webhook URLs, API keys, OAuth tokens, Script IDs, personal data, or unredacted execution logs in a public issue. If private reporting is unavailable, open a public issue containing only a short description and request a private contact channel.
+Do not put credentials, private Webhook URLs, API keys, OAuth tokens, Script IDs, personal data, or unredacted execution logs in a public issue.
 
 ## Script Property Handling
 

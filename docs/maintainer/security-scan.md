@@ -1,6 +1,6 @@
 # Security Scan Report
 
-扫描日期：2026-07-15
+扫描日期：2026-07-16
 
 ## 范围
 
@@ -29,10 +29,6 @@
 
 ## 发布判定
 
-未发现需要轮换的已提交凭证。当前代码安全扫描为 **PASSED**，但仓库在以下事项完成前仍不应改为 Public：
-
-1. 所有者明确确认公开。
-
-GitHub Private Vulnerability Reporting 只对 Public 仓库开放；可见性切换后应立即启用并验证报告入口。
+未发现需要轮换的已提交凭证。当前代码安全扫描为 **PASSED**。仓库已由所有者明确批准并切换为 Public；GitHub Private Vulnerability Reporting 已启用，匿名 Security Advisories 页面可见私密报告入口。
 
 详细发布门禁见 [`RELEASE_CHECKLIST.md`](../../RELEASE_CHECKLIST.md)。
